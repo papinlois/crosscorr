@@ -23,13 +23,13 @@ startscript = time.time()
 locfile = pd.read_csv('stations.csv')
 locs = locfile[['Name', 'Longitude', 'Latitude']].values
 
-# Plot station locations
-plt.figure()
-plt.plot(locfile['Longitude'], locfile['Latitude'], 'bo')
-for name, lon, lat in locs:
-    plt.text(lon, lat, name)
-plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
-plt.close()
+# # Plot station locations
+# plt.figure()
+# plt.plot(locfile['Longitude'], locfile['Latitude'], 'bo')
+# for name, lon, lat in locs:
+#     plt.text(lon, lat, name)
+# plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
+# plt.close()
 
 # Create an empty Stream object
 st = Stream()
@@ -45,7 +45,7 @@ channels = ['BHE']#,'BHN','BHZ']
 for sta in stas:
     for cha in channels:
         path = "C:/Users/papin/Desktop/phd/data"
-        file = f"{path}/20100520.CN.{sta}..{cha}.mseed"
+        file = f"{path}/20100518.CN.{sta}..{cha}.mseed"
         #file=f"20100516.CN.{sta}..BHE.mseed" #Google Colab
         try:
             tr = read(file)[0]  # Read only the first trace from the file
@@ -63,7 +63,7 @@ for tr in st:
 
 # Trim all traces to the same time window
 st.interpolate(sampling_rate=80, starttime=start)
-st.trim(starttime=start + 12 * 3600, endtime=start + 12 * 3600 + 3600, nearest_sample=True, pad=True, fill_value=0)
+st.trim(starttime=start + 21 * 3600, endtime=start + 21 * 3600 + 3600, nearest_sample=True, pad=True, fill_value=0)
 st.detrend(type='simple')
 st.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
@@ -115,20 +115,7 @@ for i in range(len(st)):
             xcorrfull[kk, :] = autocorr_tools.correlate_template(tr1.data, tr2.data[(kk * windowsteplen):(kk * windowsteplen + windowlen)],
                                                                   mode='valid', normalize='full', demean=True, method='auto')
             #[(kk * windowsteplen):(kk * windowsteplen + windowlen)] when using as a template
-        
-        # # Define t with the same length as xcorrfull[kk, :]
-        # t = np.linspace(0, len(xcorrfull[kk, :]) * tr1.stats.delta, len(xcorrfull[kk, :]))
 
-        # Save the cross-correlation plot to a file ###raw cross-correlation
-        fig, ax = plt.subplots(figsize=(10, 3))
-        t = st[0].stats.delta * np.arange(len(xcorrfull[kk, :]))
-        ax.plot(t, xcorrfull[kk, :])
-        ax.set_xlabel('Time (s)', fontsize=14)
-        ax.set_ylabel('Cross-Correlation', fontsize=14)
-        ax.set_title(f'Cross-Correlation between {tr1.stats.station} and {tr2.stats.station}', fontsize=16)
-        plt.savefig(f'C:/Users/papin/Desktop/phd/plots/cross_correlation_{tr1.stats.station}_{tr2.stats.station}.png')
-        plt.close()
-        
         xcorrmean += xcorrfull
         
         # Network autocorrelation
@@ -136,7 +123,9 @@ for i in range(len(st)):
         
         # Median absolute deviation
         mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))  # Median absolute deviation
+        print(mad)
         thresh = 8
+        print(np.max(xcorrmean))
         aboves = np.where(xcorrmean > thresh * mad)
         
         if aboves[0].size == 0:
@@ -155,24 +144,24 @@ for i in range(len(st)):
             plt.close()
         
             # Plot the cross-correlation function ###amt (with template)
-            winind = stats.mode(aboves[0])[0][0]
+            winind = stats.mode(aboves[0])[0][0] # Most common value (template)
             xcorr = xcorrmean[winind, :]
             fig, ax = plt.subplots(figsize=(10, 3))
             t = st[0].stats.delta * np.arange(len(xcorr))
             ax.plot(t, xcorr)
             ax.axhline(thresh * mad, color='red')
-            inds = np.where(xcorr > thresh * mad)[0]
-            clusters = autocorr_tools.clusterdects(inds, windowlen)
-            newdect = autocorr_tools.culldects(inds, clusters, xcorr)
-            ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
-            ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
-            ax.set_xlabel('Seconds of Hour 12 on 18/5', fontsize=14)
-            ax.set_ylabel('Correlation Coefficient', fontsize=14)
-            ax.set_xlim((0, 3600))
+            # inds = np.where(xcorr > thresh * mad)[0]
+            # clusters = autocorr_tools.clusterdects(inds, windowlen)
+            # newdect = autocorr_tools.culldects(inds, clusters, xcorr)
+            # ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
+            # ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
+            # ax.set_xlabel('Seconds of Hour 21 on 18/5', fontsize=14)
+            # ax.set_ylabel('Correlation Coefficient', fontsize=14)
+            # ax.set_xlim((0, 3600))
             plt.gcf().subplots_adjust(bottom=0.2)
             plt.savefig('C:/Users/papin/Desktop/phd/plots/correlation_function_plot.png')
             plt.close()
-
+            
 # Calculate and print script execution time
 end_script = time.time()
 print(f"Script execution time: {end_script - startscript:.2f} seconds")
