@@ -35,7 +35,7 @@ plt.close()
 st = Stream()
 
 # List of stations to analyze
-stas = ['SNB','LZB']#'PGC','NLLB'] 
+stas = ['LZB','SNB']#'PGC','NLLB'] 
 
 # List of channels to read
 channels = ['BHE']#,'BHN','BHZ']
@@ -119,7 +119,7 @@ for i in range(len(st)):
         # # Define t with the same length as xcorrfull[kk, :]
         # t = np.linspace(0, len(xcorrfull[kk, :]) * tr1.stats.delta, len(xcorrfull[kk, :]))
 
-        # Save the cross-correlation plot to a file
+        # Save the cross-correlation plot to a file ###raw cross-correlation
         fig, ax = plt.subplots(figsize=(10, 3))
         t = st[0].stats.delta * np.arange(len(xcorrfull[kk, :]))
         ax.plot(t, xcorrfull[kk, :])
@@ -154,7 +154,7 @@ for i in range(len(st)):
             plt.savefig('C:/Users/papin/Desktop/phd/plots/detection_plot.png')
             plt.close()
         
-            # Plot the cross-correlation function
+            # Plot the cross-correlation function ###amt (with template)
             winind = stats.mode(aboves[0])[0][0]
             xcorr = xcorrmean[winind, :]
             fig, ax = plt.subplots(figsize=(10, 3))
