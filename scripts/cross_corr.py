@@ -36,10 +36,13 @@ locs = locfile[['Name', 'Longitude', 'Latitude']].values
 st = Stream()
 
 # List of stations to analyze
-stas = ['LZB','SNB']#'PGC','NLLB'] 
+stas = ['LZB','SNB']#'PGC','NLLB']
+# stas = ['B010']#,'B926']
+
 
 # List of channels to read
 channels = ['BHE']#,'BHN','BHZ']
+# channels = ['EH2']#,'EH1','EHZ']
 #if multiple channel used, cross-correlation has to be modified so it doesn't do it with the station itself
 
 # Load data for selected stations
@@ -47,9 +50,12 @@ for sta in stas:
     for cha in channels:
         path = "C:/Users/papin/Desktop/phd/data"
         file = f"{path}/20100518.CN.{sta}..{cha}.mseed"
+        # file = f"{path}/{sta}.PB.2010.138"
         #file=f"20100516.CN.{sta}..BHE.mseed" #Google Colab
         try:
             tr = read(file)[0]  # Read only the first trace from the file
+            # tr = read(file)[1]
+            print(tr)
             st.append(tr)
             print(f"Loaded data from {file}")
         except FileNotFoundError:
@@ -68,11 +74,11 @@ st.trim(starttime=start + 21 * 3600, endtime=start + 21 * 3600 + 3600, nearest_s
 st.detrend(type='simple')
 st.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
-# Add locations
-for ii in range(0,len(stas)):
-    ind=np.where(locs[:,0]==stas[ii])
-    st[ii].stats.y=locs[ind,1][0][0]
-    st[ii].stats.x=locs[ind,2][0][0]
+# # Add locations
+# for ii in range(0,len(stas)):
+#     ind=np.where(locs[:,0]==stas[ii])
+#     st[ii].stats.y=locs[ind,1][0][0]
+#     st[ii].stats.x=locs[ind,2][0][0]
 
 # Plot the data
 plt.figure()
@@ -125,7 +131,7 @@ for i in range(len(st)):
         
         # Median absolute deviation
         mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))  # Median absolute deviation
-        print(mad)
+        print(8*mad)
         thresh = 8
         print(np.max(xcorrmean))
         aboves = np.where(xcorrmean > thresh * mad)
