@@ -11,10 +11,11 @@ import numpy as np
 import pandas as pd
 #!pip install obspy #Google Colab
 from obspy.core import Stream, read
-from obspy.signal.cross_correlation import correlate
+from obspy.signal.cross_correlation import correlate_template
 import autocorr_tools
 import matplotlib.colorbar as clrbar
 from scipy import stats
+from scipy.signal import correlate
 
 # Start timer
 startscript = time.time()
@@ -112,10 +113,11 @@ for i in range(len(st)):
         tr2 = st[j]
         xcorrfull = np.zeros((numwindows, tr1.stats.npts - windowlen + 1))
         for kk in range(numwindows):
-            xcorrfull[kk, :] = autocorr_tools.correlate_template(tr1.data, tr2.data[(kk * windowsteplen):(kk * windowsteplen + windowlen)],
+            cc1=xcorrfull[kk, :] = autocorr_tools.correlate_template(tr1.data, tr2.data[(kk * windowsteplen):(kk * windowsteplen + windowlen)],
                                                                   mode='valid', normalize='full', demean=True, method='auto')
             #[(kk * windowsteplen):(kk * windowsteplen + windowlen)] when using as a template
-
+            # cc2=correlate_template(tr1.data, tr2.data[(kk * windowsteplen):(kk * windowsteplen + windowlen)])
+            # print(cc1-cc2)
         xcorrmean += xcorrfull
         
         # Network autocorrelation
@@ -131,6 +133,7 @@ for i in range(len(st)):
         if aboves[0].size == 0:
             print("No significant correlations found.")
         else:
+            # Detection plot
             fig, ax = plt.subplots(figsize=(10, 10))
             ax.scatter(aboves[0], aboves[1], s=20, c=xcorrmean[aboves])
             ax.set_xlabel('Template Index', fontsize=14)
@@ -155,9 +158,9 @@ for i in range(len(st)):
             # newdect = autocorr_tools.culldects(inds, clusters, xcorr)
             # ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
             # ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
-            # ax.set_xlabel('Seconds of Hour 21 on 18/5', fontsize=14)
-            # ax.set_ylabel('Correlation Coefficient', fontsize=14)
-            # ax.set_xlim((0, 3600))
+            ax.set_xlabel('Seconds of Hour 21 on 18/5', fontsize=14)
+            ax.set_ylabel('Correlation Coefficient', fontsize=14)
+            ax.set_xlim((0, 3600))
             plt.gcf().subplots_adjust(bottom=0.2)
             plt.savefig('C:/Users/papin/Desktop/phd/plots/correlation_function_plot.png')
             plt.close()
