@@ -6,6 +6,7 @@ Created on Tue Oct  3 15:56:50 2023
 """
 
 import time
+import math
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -36,14 +37,12 @@ locs = locfile[['Name', 'Longitude', 'Latitude']].values
 st = Stream()
 
 # List of stations to analyze
-stas = ['LZB','SNB']#'PGC','NLLB']
+stas = ['LZB','SNB']#,'PGC','NLLB']
 # stas = ['B010']#,'B926']
-
 
 # List of channels to read
 channels = ['BHE']#,'BHN','BHZ']
 # channels = ['EH2']#,'EH1','EHZ']
-#if multiple channel used, cross-correlation has to be modified so it doesn't do it with the station itself
 
 # Load data for selected stations
 for sta in stas:
@@ -81,24 +80,32 @@ st.filter("bandpass", freqmin=1.0, freqmax=10.0)
 #     st[ii].stats.x=locs[ind,2][0][0]
 
 # Plot the data
-plt.figure()
+plt.figure(figsize=(15, 5))
 offset = 0
-for tmp in range(len(st)):
-    shade = tmp / len(st)  # Adjust this value to control the shade (0 = dark blue, 1 = light blue)
-    color = (0, 0, 0.5 + shade / 2)  # Adjust the values to control the shade
-    plt.plot(st[tmp].times("timestamp"), st[tmp].data / np.max(np.abs(st[tmp].data)) + offset, color=color)#, label=stas[tmp])
-    offset += 1
+for sta_idx, sta in enumerate(stas):
+    for cha_idx, cha in enumerate(channels):
+        tr = st[sta_idx * len(channels) + cha_idx]  # Access the trace based on station and channel index
+        shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
+        color = (0, 0, 0.5 + shade / 2)
+        plt.plot(tr.times("timestamp"), tr.data / np.max(np.abs(tr.data)) + offset, color=color, label=f"{sta}_{cha}")
+        offset += 1
+        combo = f"Station: {sta}, Channel: {cha}"  # Combination of station and channel as a string
+        print("Station-Channel Combination:", combo)  # Print the combination
 plt.xlabel('Timestamp', fontsize=14)
 plt.ylabel('Normalized Data + Offset', fontsize=14)
 plt.legend(loc='upper right', fontsize=12)
+# plt.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=12)
+# current_xlim = plt.xlim()
+# tick_positions, tick_labels = plt.xticks()
+# plt.xlim(1274217000,1274218000)
 plt.grid(True)
 plt.savefig('C:/Users/papin/Desktop/phd/plots/data_plot.png')
-plt.close()
+plt.show()
 
 # Cross-correlation parameters
 windowdur = 6  # Template window duration in seconds
 windowlen = int(windowdur * st[0].stats.sampling_rate)  # Template window length in points
-windowstep = 3  # Time shift for next window in seconds
+windowstep = 3 # Time shift for next window in seconds
 windowsteplen = int(windowstep * st[0].stats.sampling_rate)  # Time shift in points
 numwindows = int((st[0].stats.npts - windowlen) / windowsteplen)  # Number of time windows in interval
 xcorrmean = np.zeros((numwindows, st[0].stats.npts - windowlen + 1))
@@ -127,7 +134,7 @@ for i in range(len(st)):
         xcorrmean += xcorrfull
         
         # Network autocorrelation
-        xcorrmean = xcorrmean / len(st)
+        xcorrmean /= len(st)
         
         # Median absolute deviation
         mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))  # Median absolute deviation
@@ -158,7 +165,7 @@ for i in range(len(st)):
             fig, ax = plt.subplots(figsize=(10, 3))
             t = st[0].stats.delta * np.arange(len(xcorr))
             ax.plot(t, xcorr)
-            ax.axhline(thresh * mad, color='red')
+            ax.axhline(8 * mad, color='red')
             # inds = np.where(xcorr > thresh * mad)[0]
             # clusters = autocorr_tools.clusterdects(inds, windowlen)
             # newdect = autocorr_tools.culldects(inds, clusters, xcorr)
