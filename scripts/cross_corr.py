@@ -138,8 +138,8 @@ for i in range(len(st)):
         
         # Median absolute deviation
         mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))  # Median absolute deviation
-        print(8*mad)
         thresh = 8
+        print(thresh*mad)
         print(np.max(xcorrmean))
         aboves = np.where(xcorrmean > thresh * mad)
         
@@ -163,9 +163,9 @@ for i in range(len(st)):
             winind = stats.mode(aboves[0])[0][0] # Most common value (template)
             xcorr = xcorrmean[winind, :]
             fig, ax = plt.subplots(figsize=(10, 3))
-            t = st[0].stats.delta * np.arange(len(xcorr))
+            t = st[0].stats.delta * np.arange(len(xcorr)) ###need to be modified 
             ax.plot(t, xcorr)
-            ax.axhline(8 * mad, color='red')
+            ax.axhline(thresh * mad, color='red')
             # inds = np.where(xcorr > thresh * mad)[0]
             # clusters = autocorr_tools.clusterdects(inds, windowlen)
             # newdect = autocorr_tools.culldects(inds, clusters, xcorr)
