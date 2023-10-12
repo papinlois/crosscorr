@@ -1,65 +1,52 @@
-# Cross-Correlation Analysis Tool
+# Cross-Correlation Analysis for Seismic Data
 
-This Python script performs cross-correlation analysis on seismic data collected from different stations and channels. It computes cross-correlations between pairs of stations, detects significant correlations, and visualizes the results.
+This repository contains a Python script for performing cross-correlation analysis on seismic data from multiple stations. The script reads seismic data files, preprocesses the data, calculates cross-correlations between different station pairs, and identifies significant correlations.
 
-## Prerequisites
+## Overview
 
-Before using this script, make sure you have the following prerequisites installed:
+The script provided in this repository performs the following tasks:
 
-- Python 3.x
-- ObsPy: A Python toolbox for seismology. Install it using `pip`:
-
-  ```bash
-  pip install obspy
-  ```
-
-- Other required Python libraries (NumPy, Pandas, Matplotlib, and SciPy) can be installed using `pip`:
-
-  ```bash
-  pip install numpy pandas matplotlib scipy
-  ```
+1. Load seismic data from specified stations and channels.
+2. Preprocess the data, including interpolation, trimming, detrending, and filtering.
+3. Calculate cross-correlations between different station pairs.
+4. Identify significant correlations based on a threshold (8 times the Median Absolute Deviation).
+5. Save detection plots and correlation function plots for further analysis.
 
 ## Usage
 
-1. Clone this repository to your local machine.
+To use the script, follow these steps:
 
-2. Create a CSV file named `stations.csv` containing station information. The file should have the following columns:
+1. Clone the repository to your local machine:
 
-   - `Name`: Station name
-   - `Longitude`: Longitude of the station
-   - `Latitude`: Latitude of the station
-
-   Example `stations.csv`:
-
-   ```csv
-   Name,Longitude,Latitude
-   SNB,-120.123,36.789
-   LZB,-121.456,35.678
+   ```shell
+   git clone https://github.com/your-username/your-repository.git
    ```
 
-3. Place your seismic data files (in MiniSEED format) in a directory. The script expects data files to be named following the pattern `YYYYMMDD.CN.STATION.CHANNEL.mseed`. For example:
+2. Install the required dependencies. You can install ObsPy using the following command:
 
-   - `20100520.CN.SNB.BHE.mseed`
-   - `20100520.CN.LZB.BHN.mseed`
+   ```shell
+   pip install obspy
+   ```
 
-4. Modify the script's configuration variables:
+3. Create a `stations.csv` file with station information, including station names, longitudes, and latitudes.
+
+4. Place your seismic data files (in MiniSEED format) in a directory and update the `path` variable in the script to point to the data directory.
+
+5. Modify the script's configuration variables:
 
    - `stas`: List of station codes to analyze (e.g., `['SNB', 'LZB']`).
    - `channels`: List of channel codes to read (e.g., `['BHE', 'BHN', 'BHZ']`).
    - Adjust other parameters (e.g., filtering options) as needed.
 
-5. Run the script:
+6. Run the script:
 
-   ```bash
+   ```shell
    python cross_correlation_analysis.py
    ```
 
-6. The script will process the data, perform cross-correlation analysis, and generate plots showing significant correlations between stations. Results will be displayed in the terminal and saved as plot files.
+7. The script will perform the analysis and generate detection plots and correlation function plots.
 
-## Output
-
-- The script will generate plots showing significant correlations between station pairs.
-- If no significant correlations are found, it will display a message indicating so.
+8. Results, including significant correlation values, will be saved in a `results.txt` file.
 
 ## Acknowledgments
 
