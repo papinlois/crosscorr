@@ -39,12 +39,12 @@ startscript = time.time()
 # Create an empty Stream object
 st = Stream()
 
-# List of stations to analyze
-stas = ['LZB','SNB','PGC','NLLB']
+# List of stations/channels to analyze
+# CN network
+stas = ['LZB','SNB']#,'PGC','NLLB']
+channels = ['BHE']#,'BHN','BHZ']
+# # PB network
 # stas = ['B010']#,'B926']
-
-# List of channels to read
-channels = ['BHE','BHN','BHZ']
 # channels = ['EH2']#,'EH1','EHZ']
 
 # Load data for selected stations
@@ -56,10 +56,9 @@ for sta in stas:
         #file=f"20100516.CN.{sta}..BHE.mseed" #Google Colab
         try:
             tr = read(file)[0]  # Read only the first trace from the file
-            # tr = read(file)[1]
-            print(tr)
+            # tr = read(file)[ii] #need of a loop to get every channel in st
             st.append(tr)
-            print(f"Loaded data from {file}")
+            print("Loaded data :",tr)
         except FileNotFoundError:
             print(f"File {file} not found.")
 
@@ -70,44 +69,38 @@ for tr in st:
     start = max(start, tr.stats.starttime)
     end = min(end, tr.stats.endtime)
 
-# Trim all traces to the same time window
 st.interpolate(sampling_rate=80, starttime=start)
 st.trim(starttime=start + 21 * 3600, endtime=start + 21 * 3600 + 3600,
         nearest_sample=True, pad=True, fill_value=0)
 st.detrend(type='simple')
 st.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
-# Add locations
-for ii, sta in enumerate(stas):
-    ind = np.where(locs[:, 0] == sta)
-    st[ii].stats.y = locs[ind, 1][0][0]
-    st[ii].stats.x = locs[ind, 2][0][0]
+# # Add locations
+# for ii, sta in enumerate(stas):
+#     ind = np.where(locs[:, 0] == sta)
+#     st[ii].stats.y = locs[ind, 1][0][0]
+#     st[ii].stats.x = locs[ind, 2][0][0]
 
 # Plot the data
 plt.figure(figsize=(15, 5))
 offset = 0
 for sta_idx, sta in enumerate(stas):
     for cha_idx, cha in enumerate(channels):
-        tr = st[sta_idx * len(channels) + cha_idx]  # Access the trace based on station and channel index
         shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
         color = (0, 0, 0.5 + shade / 2)
+        tr = st[sta_idx * len(channels) + cha_idx]
         plt.plot(tr.times("timestamp"), tr.data / np.max(np.abs(tr.data)) + offset,
                  color=color, label=f"{sta}_{cha}")
         offset += 1
-        combo = f"Station: {sta}, Channel: {cha}"  # Combination of station and channel as a string
-        print("Station-Channel Combination:", combo)  # Print the combination
+        combo = f"Station: {sta}, Channel: {cha}"
 plt.xlabel('Timestamp', fontsize=14)
 plt.ylabel('Normalized Data + Offset', fontsize=14)
-plt.legend(loc='upper right', fontsize=12)
-# plt.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=12)
-# current_xlim = plt.xlim()
-# tick_positions, tick_labels = plt.xticks()
-# plt.xlim(1274217000,1274218000)
+plt.legend(loc='upper left', bbox_to_anchor=(1.02, 1), fontsize=12)
 plt.grid(True)
 plt.savefig('C:/Users/papin/Desktop/phd/plots/data_plot.png')
 plt.show()
 
-# Define the path for the file
+# Define the path to save threshold and xcorr values later
 file_path = "C:/Users/papin/Desktop/phd/results.txt"
 
 # Check if the file already exists, if not, create a new one with headers
@@ -122,7 +115,7 @@ def append_to_file(filename, thresh_mad, max_xcorrmean):
 
 # Cross-correlation parameters
 tr=st[0]
-windowdur  = 30  # Template window duration in seconds
+windowdur  = 30   # Template window duration in seconds
 windowstep = 2.5  # Time shift for next window in seconds
 windowlen     = int(windowdur * tr.stats.sampling_rate)   # Template window length in points
 windowsteplen = int(windowstep * tr.stats.sampling_rate)  # Time shift in points
@@ -147,7 +140,7 @@ for i in range(len(st)):
         xcorrmean /= len(st)
         
         # Median absolute deviation
-        mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))  # Median absolute deviation
+        mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
         thresh = 8
         aboves = np.where(xcorrmean > thresh * mad)
         
@@ -181,15 +174,15 @@ for i in range(len(st)):
             winind = stats.mode(aboves[0])[0][0] # Most common value (template)
             xcorr = xcorrmean[winind, :]
             fig, ax = plt.subplots(figsize=(10, 3))
-            t = st[0].stats.delta * np.arange(len(xcorr)) ###need to be modified
+            t = st[0].stats.delta * np.arange(len(xcorr))
             ax.plot(t, xcorr)
             ax.axhline(thresh * mad, color='red')
             inds = np.where(xcorr > thresh * mad)[0]
             clusters = autocorr_tools.clusterdects(inds, windowlen)
             newdect = autocorr_tools.culldects(inds, clusters, xcorr)
             ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
-            ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
-            ax.set_xlabel('Seconds of Hour 21 on 18/5', fontsize=14)
+            ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red') ###
+            ax.set_xlabel('Seconds of Hour 21 on 18/5', fontsize=14) ###
             ax.set_ylabel('Correlation Coefficient', fontsize=14)
             ax.set_xlim((0, 3600))
             plt.gcf().subplots_adjust(bottom=0.2)
@@ -216,20 +209,15 @@ x_values = range(1, len(thresh_mad_values) + 1)  # Generate line numbers
 plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
 plt.scatter(x_values, max_xcorrmean_values, c='red', label='Max Xcorrmean')
 
-# Set the y-axis limits, ticks, and grid
-plt.yticks([i * 0.2 for i in range(6)] + [1])  # Custom ticks every 0.2 and the maximum 1
-plt.ylim(0, 0.8)
-plt.grid(axis='y', linestyle='--', linewidth=0.5)  # Add a grid with dashes
-
-# Set the x-axis limits and grid
+# Set the x-axis and y-axis parameters
 plt.xticks(range(1, len(x_values) + 1))
+plt.yticks([i * 0.2 for i in range(6)] + [1])
+plt.ylim(0, 0.8)
 plt.grid(axis='x')
-
-# Add labels and legend
+plt.grid(axis='y', linestyle='--', linewidth=0.5)
 plt.xlabel('Line Number')
 plt.ylabel('Values')
 plt.legend()
 
 # Show the plot
 plt.show()
-
