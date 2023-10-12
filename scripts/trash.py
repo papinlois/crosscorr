@@ -5,6 +5,17 @@ Created on Wed Oct  4 14:26:35 2023
 @author: papin
 """
 
+# Cross-correlation for 1 set of data
+for ii, tr in enumerate(st):
+    xcorrfull = np.zeros((numwindows, tr.stats.npts - windowlen + 1))
+    for kk in range(numwindows):
+        xcorrfull[kk, :] = autocorr_tools.correlate_template(tr.data,tr.data[(kk * windowsteplen):(kk * windowsteplen + windowlen)],
+                                                              mode='valid', normalize='full', demean=True, method='auto')
+    xcorrmean += xcorrfull
+
+#############################################################################
+
+
 #Use of the cross-correlation function of numpy for 2 signals
 
 xcorr_result = np.correlate(tr1.data, tr2.data, mode='full')
@@ -121,3 +132,9 @@ for multiplier, num_significant in threshold_results.items():
         break
 
 print(f"Best multiplier for {desired_num_significant} significant correlations: {best_multiplier}")
+
+#############################################################################
+
+current_xlim = plt.xlim()
+tick_positions, tick_labels = plt.xticks()
+plt.xlim(1274217000,1274218000)
