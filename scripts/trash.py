@@ -138,3 +138,11 @@ print(f"Best multiplier for {desired_num_significant} significant correlations: 
 current_xlim = plt.xlim()
 tick_positions, tick_labels = plt.xticks()
 plt.xlim(1274217000,1274218000)
+
+#############################################################################
+
+# Add locations
+for ii, sta in enumerate(stas):
+    ind = np.where(locs[:, 0] == sta)
+    st[ii].stats.y = locs[ind, 1][0][0]
+    st[ii].stats.x = locs[ind, 2][0][0]

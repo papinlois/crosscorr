@@ -1,0 +1,137 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Oct 16 14:48:37 2023
+
+@author: papin
+"""
+
+import matplotlib.pyplot as plt
+import matplotlib.colorbar as clrbar
+import numpy as np
+import pandas as pd
+from scipy import stats
+import autocorr_tools
+
+def plot_station_locations(locs):
+    """
+    Create a plot of station locations on a map.
+
+    Parameters:
+        locs (list of tuples): A list of tuples, where each tuple contains
+        station name, longitude, and latitude.
+
+    This function creates a scatter plot of station locations and labels them
+    with station names. The resulting plot is saved as 'station_locations.png'.
+
+    Returns:
+        None
+    """
+    plt.figure()
+    plt.plot(locs[:, 1], locs[:, 2], 'bo')
+    for name, lon, lat in locs:
+        plt.text(lon, lat, name)
+    plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
+    plt.close()
+
+def merge_csv_data(csv_file_paths, date_to_find, hour_of_interest=None):
+    """
+    Merge and process data from multiple CSV files.
+
+    Parameters:
+        csv_file_paths (list of str): List of file paths to the CSV data files.
+        date_to_find (str): The date to filter by in the 'starttime' column
+            (in the format "YYYY-MM-DD").
+        hour_of_interest (int, optional): The specific hour to filter by (0-23).
+            If not provided, data from all hours is included.
+
+    This function extracts data from CSV files, filters it by date and, if
+    specified, hour, and returns a processed DataFrame with unique 'starttime'
+    values.
+
+    Returns:
+        df_no_duplicates (pd.DataFrame): The merged, filtered, and sorted
+        DataFrame with duplicate rows removed. (only want starttime of events)
+    """
+    # Read CSV files into DataFrames
+    data_frames = [pd.read_csv(file_path) for file_path in csv_file_paths]
+
+    # Filter the DataFrames by date and, if specified, hour
+    filtered_data_frames = []
+
+    for df in data_frames:
+        if hour_of_interest is not None:
+            filter_condition = (df['starttime'].str.contains(date_to_find)) & (df['starttime'].str.contains(f"T{hour_of_interest:02d}:"))
+            filtered_data_frames.append(df[filter_condition])
+        else:
+            filter_condition = df['starttime'].str.contains(date_to_find)
+            filtered_data_frames.append(df[filter_condition])
+
+    # Merge the filtered DataFrames
+    merged_df = pd.concat(filtered_data_frames, ignore_index=True)
+
+    # Sort by the "starttime" column
+    sorted_df = merged_df.sort_values(by="starttime", ascending=True)
+
+    # Remove duplicate rows based on the "starttime" column
+    df_no_duplicates = sorted_df.drop_duplicates(subset="starttime")
+
+    return df_no_duplicates
+
+def create_detection_plot(aboves, xcorrmean, detection_plot_filename):
+    """
+    Create a detection plot.
+
+    Parameters:
+        aboves (tuple): A tuple containing two arrays - aboves[0] for Template Index
+            and aboves[1] for Time Index.
+        xcorrmean (numpy.ndarray): Array containing the correlation coefficients.
+        detection_plot_filename (str): The file path to save the detection plot.
+    """
+    _, ax = plt.subplots(figsize=(10, 10))
+    ax.scatter(aboves[0], aboves[1], s=20, c=xcorrmean[aboves])
+    ax.set_xlabel('Template Index', fontsize=14)
+    ax.set_ylabel('Time Index', fontsize=14)
+    cax, _ = clrbar.make_axes(ax)
+    cbar = clrbar.ColorbarBase(cax)
+    cbar.ax.set_ylabel('Correlation Coefficient', rotation=270, 
+                       labelpad=15, fontsize=14)
+    ax.set_xlim((np.min(aboves[0]), np.max(aboves[0])))
+    ax.set_ylim((np.min(aboves[1]), np.max(aboves[1])))
+    plt.savefig(detection_plot_filename)
+    plt.close()
+
+def plot_cross_correlation(xcorrmean, aboves, thresh, mad, windowlen, st, hour_of_interest, date_of_interest, correlation_function_plot_filename):
+    """
+    Plot the cross-correlation function with template.
+
+    Parameters:
+        xcorrmean (numpy.ndarray): 2D array containing cross-correlation values.
+        aboves (tuple): Tuple of arrays containing significant correlation indices.
+        thresh (float): Threshold value.
+        mad (float): Median absolute deviation.
+        windowlen (int): Template window length in points.
+        st (obspy.core.stream.Stream): ObsPy stream object containing the data.
+        hour_of_interest (int): The specific hour of interest.
+        date_of_interest (str): The date of interest (in the format "YYYYMMDD").
+        correlation_function_plot_filename (str): Path to save the plot.
+
+    Returns:
+        None
+    """
+    winind = stats.mode(aboves[0], keepdims=False)[0][0]  # Most common value (template)
+    xcorr = xcorrmean[winind, :]
+    _, ax = plt.subplots(figsize=(10, 3))
+    t = st[0].stats.delta * np.arange(len(xcorr))
+    ax.plot(t, xcorr)
+    ax.axhline(thresh * mad, color='red')
+    inds = np.where(xcorr > thresh * mad)[0]
+    clusters = autocorr_tools.clusterdects(inds, windowlen)
+    newdect = autocorr_tools.culldects(inds, clusters, xcorr)
+    ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
+    ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
+    ax.set_xlabel(f'Seconds of Hour {hour_of_interest} on {date_of_interest}', fontsize=14)
+    ax.set_ylabel('Correlation Coefficient', fontsize=14)
+    ax.set_xlim((0, 3600))
+    plt.gcf().subplots_adjust(bottom=0.2)
+    plt.savefig(correlation_function_plot_filename)
+    plt.close()
