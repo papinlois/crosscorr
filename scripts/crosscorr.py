@@ -2,6 +2,8 @@
 """
 Created on Tue Oct  3 15:56:50 2023
 
+Functions are from autcorrelation and crosscorrelation tools
+
 @author: papin
 """
 
