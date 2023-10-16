@@ -140,6 +140,8 @@ for idx, row in result_df.iterrows():
         second=time_obj.second,
     )
     
+    ###datetime is the time of the event detected in cut : need to be used
+    
     for i in range(len(st)):
         tr1 = st[i]
         for j in range(i + 1, len(st)):
@@ -165,27 +167,25 @@ for idx, row in result_df.iterrows():
             append_to_file(file_path, thresh * mad, np.max(xcorrmean))
             
             # Construct a filename based on station combinations
-            station_combination = f"{tr1.stats.station}_{tr2.stats.station}_Channel{cha}"
+            station_combination = f"{tr1.stats.station}_{tr2.stats.station}_{cha}"
             print(station_combination)
             
             if aboves[0].size == 0:
                 print("No significant correlations found.")
             else:
-                # Save the figures with a specific name
+                # Creation of the detection plot with template/time index
                 detection_plot_filename = (
                     f'C:/Users/papin/Desktop/phd/plots/'
                     f'detection_plot_{station_combination}.png'
                 )
-                correlation_function_plot_filename = (
-                    f'C:/Users/papin/Desktop/phd/plots/'
-                    f'correlation_function_plot_{station_combination}.png'
-                )
-                
-                # Creation of the detection plot with template/time index
                 crosscorr_tools.create_detection_plot(aboves, xcorrmean, 
                                                       detection_plot_filename)
             
                 # Creation of the cross-correlation plot
+                correlation_function_plot_filename = (
+                    f'C:/Users/papin/Desktop/phd/plots/'
+                    f'correlation_function_plot_{station_combination}.png'
+                )
                 crosscorr_tools.plot_cross_correlation(xcorrmean, aboves, 
                                                        thresh, mad, windowlen, 
                                                        st, hour_of_interest, 
