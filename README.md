@@ -41,7 +41,7 @@ To use the script, follow these steps:
 6. Run the script:
 
    ```shell
-   python cross_correlation_analysis.py
+   python crosscorr.py
    ```
 
 7. The script will perform the analysis and generate detection plots and correlation function plots.
