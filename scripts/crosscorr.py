@@ -2,7 +2,7 @@
 """
 Created on Tue Oct  3 15:56:50 2023
 
-Functions are from autcorrelation and crosscorrelation tools
+Functions are from autocorrelation and crosscorrelation tools
 
 @author: papin
 """
@@ -13,6 +13,8 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from obspy import UTCDateTime
+
 from obspy.core import Stream, read
 import autocorr_tools
 import crosscorr_tools
@@ -142,17 +144,24 @@ for idx, row in result_df.iterrows():
         second=time_obj.second,
     )
     
-    ###datetime is the time of the event detected in cut : need to be used
+    # Calculate the new template time (date_for_xcorr + 30 seconds)
+    template_time = UTCDateTime(datetime_for_xcorr + pd.Timedelta(seconds=30))
     
     for i in range(len(st)):
         tr1 = st[i]
+        
+        # Find the template index in the trace
+        template_index = int((template_time - tr1.stats.starttime) * tr1.stats.sampling_rate)            
+        
         for j in range(i + 1, len(st)):
             tr2 = st[j]
             xcorrfull = np.zeros((numwindows, tr1.stats.npts - windowlen + 1))
-            # Calculate cross-correlation
-            for kk in range(numwindows):
-                xcorrfull[kk, :] = autocorr_tools.correlate_template(
-                    tr1.data, tr2.data[kk * windowsteplen : (kk * windowsteplen + windowlen)],
+
+            # Calculate cross-correlation using the template
+            for k in range(numwindows):
+                xcorrfull[k, :] = autocorr_tools.correlate_template(
+                    tr1.data,
+                    tr2.data[template_index:template_index + windowlen],  # Use the template data
                     mode='valid', normalize='full', demean=True, method='auto'
                 )
             xcorrmean += xcorrfull
@@ -193,7 +202,10 @@ for idx, row in result_df.iterrows():
                                                        st, hour_of_interest, 
                                                        date_of_interest, 
                                                        correlation_function_plot_filename)
-
+    # Stop the loop after processing the 10th line
+    if idx == 2:
+        break
+    
 # Calculate and print script execution time
 end_script = time.time()
 print(f"Script execution time: {end_script - startscript:.2f} seconds")
