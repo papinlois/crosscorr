@@ -118,7 +118,7 @@ def plot_cross_correlation(xcorrmean, aboves, thresh, mad, windowlen, st, hour_o
     Returns:
         None
     """
-    winind = stats.mode(aboves[0], keepdims=False)[0][0]  # Most common value (template)
+    winind = stats.mode(aboves[0], keepdims=False)[0]  # Most common value (template)
     xcorr = xcorrmean[winind, :]
     _, ax = plt.subplots(figsize=(10, 3))
     t = st[0].stats.delta * np.arange(len(xcorr))
