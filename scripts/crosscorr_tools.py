@@ -74,6 +74,9 @@ def merge_csv_data(csv_file_paths, date_to_find, hour_of_interest=None):
 
     # Remove duplicate rows based on the "starttime" column
     df_no_duplicates = sorted_df.drop_duplicates(subset="starttime")
+    
+    # Reset the index to start from 1
+    df_no_duplicates.reset_index(drop=True, inplace=True)
 
     return df_no_duplicates
 
@@ -135,3 +138,23 @@ def plot_cross_correlation(xcorrmean, aboves, thresh, mad, windowlen, st, hour_o
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.savefig(correlation_function_plot_filename)
     plt.close()
+
+def plot_data(st, stas, channels):
+    plt.figure(figsize=(15, 5))
+    offset = 0
+    for sta_idx, sta in enumerate(stas):
+        for cha_idx, cha in enumerate(channels):
+            shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
+            color = (0, 0, 0.5 + shade / 2)
+            tr = st[sta_idx * len(channels) + cha_idx]
+            plt.plot(tr.times("timestamp"), tr.data / np.max(np.abs(tr.data)) + offset,
+                      color=color, label=f"{sta}_{cha}")
+            offset += 1
+    plt.xlabel('Timestamp', fontsize=14)
+    plt.ylabel('Normalized Data + Offset', fontsize=14)
+    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.grid(True)
+    plt.savefig('C:/Users/papin/Desktop/phd/plots/data_plot.png')
+    plt.close()
+    
+    return cha
