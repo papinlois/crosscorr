@@ -21,7 +21,7 @@ import crosscorr_tools
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
 locs = locfile[['Name', 'Longitude', 'Latitude']].values
-# crosscorr_tools.plot_station_locations(locs)
+crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
 startscript = time.time()
@@ -86,6 +86,12 @@ def load_station_data(stas, channels, date_of_interest):
 # Call the function to load station data
 st = load_station_data(stas, channels, date_of_interest)
 
+# Add locations
+for ii, sta in enumerate(stas):
+    ind = np.where(locs[:, 0] == sta)
+    st[ii].stats.y = locs[ind, 1][0][0]
+    st[ii].stats.x = locs[ind, 2][0][0]
+
 # Call the function to plot the data
 cha=crosscorr_tools.plot_data(st, stas, channels)
 
@@ -138,18 +144,18 @@ for idx, row in result_df.iterrows():
     
     for i in range(len(st)):
         tr1 = st[i]
-        print(tr1)
+        # print(tr1)
         # Find the template index in the trace
         template_index = int((template_time - tr1.stats.starttime) * tr1.stats.sampling_rate)            
         for j in range(i + 1, len(st)):
             tr2 = st[j]
-            print(tr2)
+            # print(tr2)
             xcorrfull = np.zeros((numwindows, tr1.stats.npts - windowlen + 1))
             # Calculate cross-correlation using the template
             for k in range(numwindows):
                 xcorrfull[k, :] = autocorr_tools.correlate_template(
-                    tr1.data,
-                    tr2.data[template_index:template_index + windowlen],  # Use the template data
+                    tr1.data, # Use the template data
+                    tr2.data[template_index:template_index + windowlen], 
                     mode='valid', normalize='full', demean=True, method='auto'
                 )
             xcorrmean += xcorrfull
