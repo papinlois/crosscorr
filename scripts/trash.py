@@ -15,9 +15,7 @@ for ii, tr in enumerate(st):
 
 #############################################################################
 
-
 #Use of the cross-correlation function of numpy for 2 signals
-
 xcorr_result = np.correlate(tr1.data, tr2.data, mode='full')
 
 # Time values for x-axis
@@ -135,14 +133,35 @@ print(f"Best multiplier for {desired_num_significant} significant correlations: 
 
 #############################################################################
 
-current_xlim = plt.xlim()
-tick_positions, tick_labels = plt.xticks()
-plt.xlim(1274217000,1274218000)
+# Initialize the list of CSV file paths
+csv_file_paths = []
+
+# Create CSV file paths for each station
+for sta in stas:
+    file_path = f'data/cut/cut_daily_CN.{sta}.csv'
+    csv_file_paths.append(file_path)
+
+# Call the function to merge and process the CSV data
+result_df = crosscorr_tools.merge_csv_data(csv_file_paths, 
+                                           date_to_find, hour_of_interest)
 
 #############################################################################
 
-# Add locations
-for ii, sta in enumerate(stas):
-    ind = np.where(locs[:, 0] == sta)
-    st[ii].stats.y = locs[ind, 1][0][0]
-    st[ii].stats.x = locs[ind, 2][0][0]
+starttime = row['starttime']
+
+# Extract the date and time components
+datee, timee = starttime.split('T')
+
+# Convert date and time to datetime objects
+date_obj = pd.to_datetime(datee)
+time_obj = pd.to_datetime(timee)
+
+# Combine date and time to create a datetime object
+datetime_for_xcorr = date_obj.replace(
+    hour=time_obj.hour,
+    minute=time_obj.minute,
+    second=time_obj.second,
+)
+
+# Calculate the new template time (date_for_xcorr + 10 seconds)
+template_time = UTCDateTime(datetime_for_xcorr + pd.Timedelta(seconds=10))
