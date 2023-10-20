@@ -140,10 +140,25 @@ def plot_cross_correlation(xcorrmean, aboves, thresh, mad, windowlen, st, hour_o
     plt.close()
 
 def plot_data(st, stas, channels):
+    """
+    Plot station data.
+
+    Parameters:
+        st (obspy.core.stream.Stream): Stream containing seismic data.
+        stas (list of str): List of station names.
+        channels (list of str): List of channel names.
+
+    This function plots the seismic data from the specified stations and channels,
+    normalizing each trace and adding an offset for visualization.
+
+    Returns:
+        cha (str): The channel name used for plotting.
+    """
     plt.figure(figsize=(15, 5))
     offset = 0
     for sta_idx, sta in enumerate(stas):
         for cha_idx, cha in enumerate(channels):
+            # Calculate color shade
             shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
             color = (0, 0, 0.5 + shade / 2)
             tr = st[sta_idx * len(channels) + cha_idx]

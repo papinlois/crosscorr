@@ -10,6 +10,7 @@ Functions are from autocorrelation and crosscorrelation tools
 import os
 import time
 import math
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -28,63 +29,37 @@ startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-stas = ['NLLB','SNB']#,'PGC','LZB']
-# stas=['YOUB','PFB']
-channels = ['BHE']#,'BHN']#,'BHZ'] ###doesn't work for more than 1 channel
-# # PB network
-# stas = ['B010']#,'B926']
-# channels = ['EH2']#,'EH1','EHZ']
+stas = ['LZB','SNB','PGC','NLLB']
+channels = ['BHE']
 
 # Hour and date of interest
-hour_of_interest = 21
-date_of_interest = "20100518"
-date_to_find = f"{date_of_interest[:4]}-{date_of_interest[4:6]}-{date_of_interest[6:]}"
+date_of_interest = "20100516"
+startdate=datetime.strptime(date_of_interest, "%Y%m%d")
+enddate=startdate+timedelta(days=1)
 
-# Initialize the list of CSV file paths
-csv_file_paths = []
-
-# Create CSV file paths for each station
+st = Stream()
 for sta in stas:
-    file_path = f'data/cut/cut_daily_CN.{sta}.csv'
-    csv_file_paths.append(file_path)
+    for cha in channels:
+        path = "C:/Users/papin/Desktop/phd/data/seed"
+        file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
+        try:
+            tr = read(file)[0]  # Careful for other networks
+            st.append(tr)
+            #print("Loaded data:", tr)
+        except FileNotFoundError:
+            print(f"File {file} not found.")
 
-# Call the function to merge and process the CSV data
-result_df = crosscorr_tools.merge_csv_data(csv_file_paths, 
-                                           date_to_find, hour_of_interest)
-
-def load_station_data(stas, channels, date_of_interest):
-    """
-    Load and preprocess station data from MiniSEED files.
-    """
-    st = Stream()
-    for sta in stas:
-        for cha in channels:
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
-            try:
-                tr = read(file)[0]  # Careful for other networks
-                st.append(tr)
-                print("Loaded data:", tr)
-            except FileNotFoundError:
-                print(f"File {file} not found.")
-
-    # Preprocessing: Interpolation, trimming, detrending, and filtering
-    start = st[0].stats.starttime
-    end = st[0].stats.endtime
-    for tr in st:
-        start = max(start, tr.stats.starttime)
-        end = min(end, tr.stats.endtime)
-    st.interpolate(sampling_rate=80, starttime=start) # Can be changed
-    st.trim(starttime=start + hour_of_interest * 3600,
-            endtime=start + hour_of_interest * 3600 + 3600, # Can be changed
-            nearest_sample=True, pad=True, fill_value=0)
-    st.detrend(type='simple')
-    st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be changed
-
-    return st
-
-# Call the function to load station data
-st = load_station_data(stas, channels, date_of_interest)
+# Preprocessing: Interpolation, trimming, detrending, and filtering
+start = st[0].stats.starttime
+end = st[0].stats.endtime
+for tr in st:
+    start = max(start, tr.stats.starttime)
+    end = min(end, tr.stats.endtime)
+st.interpolate(sampling_rate=80, starttime=start) # Can be modified
+st.trim(starttime=start,endtime=end, # Can be modified
+        nearest_sample=True, pad=True, fill_value=0)
+st.detrend(type='simple')
+st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
 
 # Add locations
 for ii, sta in enumerate(stas):
@@ -96,139 +71,140 @@ for ii, sta in enumerate(stas):
 cha=crosscorr_tools.plot_data(st, stas, channels)
 
 # Define the path to save threshold and xcorr values later
-file_path = "C:/Users/papin/Desktop/phd/results.txt"
+file_path = "C:/Users/papin/Desktop/phd/threshold.txt"
 
 # Function to append values to the file
-def append_to_file(filename, thresh_mad, max_xcorrmean):
+def append_to_file(filename, thresh_mad, max_xcorr):
     """
     Append threshold and maximum cross-correlation values to a text file.
     """
     with open(filename, "a", encoding='utf-8') as file:
-        file.write(f"{thresh_mad}\t{max_xcorrmean}\n")
+        file.write(f"{thresh_mad}\t{max_xcorr}\n")
 
 # Check if the file already exists, if not, create a new one with headers
 if not os.path.isfile(file_path):
     with open(file_path, "w", encoding='utf-8') as file:
-        file.write("Thresh * Mad\tMax Xcorrmean\n")
+        file.write("Thresh * Mad\tMax xcorr\n")
 
-# Cross-correlation parameters
-tr=st[0] # Can be changed
-windowdur  = 30  # Template window duration in seconds
-windowstep = 15  # Time shift for next window in seconds
-windowlen     = int(windowdur * tr.stats.sampling_rate)   # In points
-windowsteplen = int(windowstep * tr.stats.sampling_rate)  # In points
-numwindows = int((tr.stats.npts - windowlen) / windowsteplen)  # Number of time windows in interval
+# load LFE data
+df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
+df_full=df_full[(df_full['residual']<0.5)] # & (df_full['N']>3)]
+df_full['datetime']=pd.to_datetime(df_full['OT'])
+templates=df_full[(df_full['datetime']>=startdate) & (df_full['datetime']<enddate) & (df_full['residual']<0.1)]
 
-# Cross-correlation between different stations
-xcorrmean = np.zeros((numwindows, tr.stats.npts - windowlen + 1))
+# Add a new column for the index of the lines
+templates.reset_index(inplace=True, drop=True)
+templates.index.name = 'Index'
 
-for idx, row in result_df.iterrows():
-    starttime = row['starttime']
+# Collect information
+combinations = []  # Store significant correlations
+info_lines = []  # Store lines of information
 
-    # Extract the date and time components
-    datee, timee = starttime.split('T')
+# Get the list of stations used
+stations_used = ", ".join(stas)
 
-    # Convert date and time to datetime objects
-    date_obj = pd.to_datetime(datee)
-    time_obj = pd.to_datetime(timee)
+# Iterate over all stations
+for i in range(len(st)):
+    tr1 = st[i]
     
-    # Combine date and time to create a datetime object
-    datetime_for_xcorr = date_obj.replace(
-        hour=time_obj.hour,
-        minute=time_obj.minute,
-        second=time_obj.second,
-    )
-    
-    # Calculate the new template time (date_for_xcorr + 10 seconds)
-    template_time = UTCDateTime(datetime_for_xcorr + pd.Timedelta(seconds=10))
-    
-    for i in range(len(st)):
-        tr1 = st[i]
-        # print(tr1)
-        # Find the template index in the trace
-        template_index = int((template_time - tr1.stats.starttime) * tr1.stats.sampling_rate)            
-        for j in range(i + 1, len(st)):
-            tr2 = st[j]
-            # print(tr2)
-            xcorrfull = np.zeros((numwindows, tr1.stats.npts - windowlen + 1))
-            # Calculate cross-correlation using the template
-            for k in range(numwindows):
-                xcorrfull[k, :] = autocorr_tools.correlate_template(
-                    tr1.data, # Use the template data
-                    tr2.data[template_index:template_index + windowlen], 
-                    mode='valid', normalize='full', demean=True, method='auto'
-                )
-            xcorrmean += xcorrfull
-            
-            # Network autocorrelation
-            xcorrmean /= len(st)
-            
-            # Median absolute deviation
-            mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
-            thresh = 8
-            aboves = np.where(xcorrmean > thresh * mad)
-            
-            # Append the values to the file
-            append_to_file(file_path, thresh * mad, np.max(xcorrmean))
-            
-            # Construct a filename based on station combinations and template_index
-            station_combination = ( 
-                f'{tr1.stats.station}_{tr2.stats.station}'
-                f'_{cha}_template{template_index}'
+    # Iterate over all templates
+    for idx in range(len(templates)):
+        template_stats = templates.iloc[idx]
+        start = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
+        end = UTCDateTime(template_stats['datetime'] + timedelta(seconds=40))
+        template = st.copy().trim(starttime=start, endtime=end)
+        
+        # Initialize xcorr for the current station and template
+        xcorr = np.zeros(tr1.stats.npts - template[0].stats.npts + 1)
+
+        # Calculate cross-correlation using the current template
+        for j in range(len(template)):
+            tr2 = template[j]
+            xcorr_template = autocorr_tools.correlate_template(
+                tr1.data,tr2.data,
+                mode='valid', normalize='full', demean=True, method='auto'
             )
-            
-            if aboves[0].size == 0:
-                print("No significant correlations found.")
-            else:
-                # Creation of the detection plot with template/time index
-                detection_plot_filename = (
-                    f'C:/Users/papin/Desktop/phd/plots/'
-                    f'detection_plot_{station_combination}.png'
-                )
-                crosscorr_tools.create_detection_plot(aboves, xcorrmean, 
-                                                      detection_plot_filename)
-                # Creation of the cross-correlation plot
-                correlation_function_plot_filename = (
-                    f'C:/Users/papin/Desktop/phd/plots/'
-                    f'correlation_function_plot_{station_combination}.png'
-                )
-                crosscorr_tools.plot_cross_correlation(xcorrmean, aboves, 
-                                                       thresh, mad, windowlen, 
-                                                       st, hour_of_interest, 
-                                                       date_of_interest, 
-                                                       correlation_function_plot_filename)
-   
+            xcorr += xcorr_template
+        
+        # Find indices where the cross-correlation values are above the threshold
+        mad = np.median(np.abs(xcorr - np.median(xcorr)))
+        thresh = 8
+        aboves = np.where(xcorr > thresh * mad)
+
+        # Extract station and template information
+        station = tr1.stats.station
+        channel = tr1.stats.channel
+        template_index = idx
+
+        # Construct a filename based on station combinations and template_index
+        crosscorr_combination = (
+            f'{station}_{channel}_template{template_index}'
+        )
+        #print(crosscorr_combination)
+        if aboves[0].size == 0:
+            #print("No significant correlations found")
+            info_lines.append(f"{crosscorr_combination}:"
+                              f" No significant correlations found")
+        else:
+            # Creation of the cross-correlation plot
+            correlation_plot_filename = (
+                f'C:/Users/papin/Desktop/phd/plots/'
+                f'correlation_function_plot_{crosscorr_combination}.png'
+            )
+            windowlen=template[0].stats.npts
+            fig, ax = plt.subplots(figsize=(10,3))
+            t=st[0].stats.delta*np.arange(len(xcorr))
+            ax.plot(t,xcorr)
+            ax.axhline(thresh*mad,color='red')
+            inds=np.where(xcorr>thresh*mad)[0]
+            clusters=autocorr_tools.clusterdects(inds,windowlen)
+            newdect=autocorr_tools.culldects(inds,clusters,xcorr)
+            ax.plot(newdect*st[0].stats.delta,xcorr[newdect],'kx')
+            ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=16,color='red')
+            ax.set_xlabel('Time', fontsize=14)
+            ax.set_ylabel('Correlation Coefficient', fontsize=14) ###
+            ax.set_xlim((0,86000))
+            plt.gcf().subplots_adjust(bottom=0.2)
+            plt.savefig(correlation_plot_filename)
+            plt.close()
+
 # Calculate and print script execution time
 end_script = time.time()
-print(f"Script execution time: {end_script - startscript:.2f} seconds")
+script_execution_time = end_script - startscript
+print(f"Script execution time: {script_execution_time:.2f} seconds")
 
-# # Create a histogram
-# plt.hist(aboves[1], bins=100)  # Adjust the number of bins as needed
-# plt.xlabel('Time Index')
-# plt.ylabel('Frequency')
-# plt.title('Histogram of Time Indices for Significant Correlations')
-# plt.show()
+# Write information to a text file
+info_file_path = "C:/Users/papin/Desktop/phd/info.txt"
 
+with open(info_file_path, 'w', encoding='utf-8') as file:
+    file.write(f"Date Range: {startdate} - {enddate}\n\n")
+    file.write(f"Stations and Channel Used: {stations_used} --- {channel}\n\n")
+    file.write("Templates:\n")
+    file.write(templates.to_string() + '\n\n')
+    file.write("No significant Correlations:\n")
+    file.write("\n".join(info_lines) + '\n\n')
+    file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
+  
 # Read data from the results.txt file
-with open('C:/Users/papin/Desktop/phd/results.txt', 'r', encoding='utf-8') as file:
+with open('C:/Users/papin/Desktop/phd/threshold.txt', 'r', encoding='utf-8') as file:
     lines = file.readlines()
     thresh_mad_values = []
-    max_xcorrmean_values = []
+    max_xcorr_values = []
     for line in lines[1:]:  # Skip the header line
         parts = line.split('\t')
         thresh_mad_values.append(float(parts[0]))
-        max_xcorrmean_values.append(float(parts[1]))
+        max_xcorr_values.append(float(parts[1]))
 
 # Create the scatter plot
 x_values = range(1, len(thresh_mad_values) + 1)  # Generate line numbers
 plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
-plt.scatter(x_values, max_xcorrmean_values, c='red', label='Max Xcorrmean')
+plt.scatter(x_values, max_xcorr_values, c='red', label='Max Xcorr')
 
 # Set the x-axis and y-axis parameters
 plt.xticks(range(1, len(x_values) + 1))
 plt.yticks([i * 0.1 for i in range(6)] + [1])
 max_y = math.ceil(max(max(thresh_mad_values), 
-                      max(max_xcorrmean_values)) / 0.1) * 0.1 + 0.1
+                      max(max_xcorr_values)) / 0.1) * 0.1 + 0.1
 plt.ylim(0, max_y)
 plt.grid(axis='x')
 plt.grid(axis='y', linestyle='--', linewidth=0.5)
