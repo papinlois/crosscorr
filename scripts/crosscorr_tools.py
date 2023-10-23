@@ -157,20 +157,28 @@ def plot_data(st, stas, channels):
     """
     plt.figure(figsize=(15, 5))
     offset = 0
+    
+    # Get the start date from the first trace in the stream
+    start_date = st[0].stats.starttime.strftime("%Y%m%d")
+    
     for sta_idx, sta in enumerate(stas):
         for cha_idx, cha in enumerate(channels):
             # Calculate color shade
             shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
             color = (0, 0, 0.5 + shade / 2)
             tr = st[sta_idx * len(channels) + cha_idx]
-            plt.plot(tr.times("timestamp"), tr.data / np.max(np.abs(tr.data)) + offset,
+            
+            # Calculate the time array in seconds
+            time_in_seconds = np.arange(len(tr.data)) * tr.stats.delta
+            plt.plot(time_in_seconds, tr.data / np.max(np.abs(tr.data)) + offset,
                       color=color, label=f"{sta}_{cha}")
             offset += 1
-    plt.xlabel('Timestamp', fontsize=14)
+    plt.xlabel('Time (seconds)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
+    plt.title(f'Full day of {start_date}', fontsize=16)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
     plt.grid(True)
-    plt.savefig('C:/Users/papin/Desktop/phd/plots/data_plot.png')
+    plt.savefig(f'C:/Users/papin/Desktop/phd/plots/data_plot_{start_date}.png')
     plt.close()
     
     return cha
