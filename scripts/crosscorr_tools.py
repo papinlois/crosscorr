@@ -7,6 +7,7 @@ Created on Mon Oct 16 14:48:37 2023
 
 import numpy as np
 import pandas as pd
+import math
 import matplotlib.pyplot as plt
 import matplotlib.colorbar as clrbar
 from scipy import stats
@@ -173,3 +174,45 @@ def plot_data(st, stas, channels):
     plt.close()
     
     return cha
+
+def append_to_file(filename, thresh_mad, max_xcorr):
+    """
+    Append threshold and maximum cross-correlation values to a text file.
+    """
+    with open(filename, "a", encoding='utf-8') as file:
+        file.write(f"{thresh_mad}\t{max_xcorr}\n")
+
+def plot_scatter_from_file(file_path):
+    """
+    Read data from a file and create a scatter plot.
+
+    Parameters:
+        file_path (str): The path to the file containing the data.
+
+    This function reads data from a file, assumes a specific format, and creates
+    a scatter plot based on the read data.
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+        thresh_mad_values = []
+        max_xcorr_values = []
+        for line in lines[1:]:  # Skip the header line
+            parts = line.split('\t')
+            thresh_mad_values.append(float(parts[0]))
+            max_xcorr_values.append(float(parts[1]))
+
+    x_values = range(1, len(thresh_mad_values) + 1)
+    plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
+    plt.scatter(x_values, max_xcorr_values, c='red', label='Max Xcorr')
+
+    plt.xticks(range(1, len(x_values) + 1))
+    plt.yticks([i * 0.1 for i in range(6)] + [1])
+    max_y = math.ceil(max(max(thresh_mad_values), max(max_xcorr_values)) / 0.1) * 0.1 + 0.1
+    plt.ylim(0, max_y)
+    plt.grid(axis='x')
+    plt.grid(axis='y', linestyle='--', linewidth=0.5)
+    plt.xlabel('Number')
+    plt.ylabel('Values of Correlation')
+    plt.legend()
+    plt.show()
+
