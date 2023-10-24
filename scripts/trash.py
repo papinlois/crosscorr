@@ -165,3 +165,24 @@ datetime_for_xcorr = date_obj.replace(
 
 # Calculate the new template time (date_for_xcorr + 10 seconds)
 template_time = UTCDateTime(datetime_for_xcorr + pd.Timedelta(seconds=10))
+
+#############################################################################
+
+from pympler import asizeof
+
+# Calculate the total memory consumption for df_full
+df_full_memory = asizeof.asizeof(df_full)
+
+# Calculate the total memory consumption for templates
+templates_memory = asizeof.asizeof(templates)
+
+# Calculate the total memory consumption for tr
+tr_memory = asizeof.asizeof(tr)
+
+# Calculate the total memory consumption for st
+st_memory = asizeof.asizeof(st)
+
+print(f"Memory Consumption for df_full: {df_full_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for templates: {templates_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for tr: {tr_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for st: {st_memory / (1024 * 1024):.2f} MB")
