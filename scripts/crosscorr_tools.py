@@ -212,8 +212,7 @@ def plot_scatter_from_file(file_path):
     x_values = range(1, len(thresh_mad_values) + 1)
     plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
     plt.scatter(x_values, max_xcorr_values, c='red', label='Max Xcorr')
-
-    plt.xticks(range(1, len(x_values) + 1))
+    # plt.xticks(range(1, len(x_values) + 1))
     plt.yticks([i * 0.1 for i in range(6)] + [1])
     max_y = math.ceil(max(max(thresh_mad_values), max(max_xcorr_values)) / 0.1) * 0.1 + 0.1
     plt.ylim(0, max_y)
