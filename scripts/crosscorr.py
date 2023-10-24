@@ -35,7 +35,7 @@ channels = ['BHE']
 stations_used = ", ".join(stas)
 
 # Hour and date of interest
-date_of_interest = "20100517"
+date_of_interest = "20100516"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
@@ -55,24 +55,23 @@ st = Stream(traces=get_traces(stas, channels))
 # Preprocessing: Interpolation, trimming, detrending, and filtering
 start = st[0].stats.starttime
 end = st[0].stats.endtime
-for tr in st:
+for tr in st: # In case of different time frame of streams
     start = max(start, tr.stats.starttime)
     end = min(end, tr.stats.endtime)
 del tr
 st.interpolate(sampling_rate=80, starttime=start) # Can be modified
-st.trim(starttime=start,endtime=end, # Can be modified
-        nearest_sample=True, pad=True, fill_value=0)
+st.trim(starttime=start,endtime=end, fill_value=0)
 st.detrend(type='simple')
 st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
+
+# Call the function to plot the data
+cha=crosscorr_tools.plot_data(st, stas, channels)
 
 # Add locations
 for ii, sta in enumerate(stas):
     ind = np.where(locs[:, 0] == sta)
     st[ii].stats.y = locs[ind, 1][0][0]
     st[ii].stats.x = locs[ind, 2][0][0]
-
-# Call the function to plot the data
-cha=crosscorr_tools.plot_data(st, stas, channels)
 
 # Define the path to save threshold and xcorr values later
 file_path = "C:/Users/papin/Desktop/phd/threshold.txt"
@@ -82,7 +81,7 @@ if not os.path.isfile(file_path):
     with open(file_path, "w", encoding='utf-8') as file:
         file.write("Thresh * Mad\tMax xcorr\n")
 
-# Load LFE data
+# Load LFE data on Tim's catalog
 df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
 df_full=df_full[(df_full['residual']<0.5)] # & (df_full['N']>3)]
 df_full['datetime']=pd.to_datetime(df_full['OT'])
@@ -90,8 +89,8 @@ templates = df_full[(df_full['datetime'] >= start.datetime)
                    & (df_full['datetime'] < end.datetime) 
                    & (df_full['residual'] < 0.1)]
 templates = templates.drop(columns=['dates', 'N'])
-del df_full
-# Add a new column for the index of the lines
+del df_full # too big to keep and useless
+# Add a new column for the index of the lines (for output file)
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 
@@ -113,8 +112,9 @@ for batch_idx, template_group in enumerate(template_groups):
                 end = UTCDateTime(template_stats['datetime'] + timedelta(seconds=40))
                 template = st.copy().trim(starttime=start, endtime=end)
                 
-                # Initialize xcorr for the current station and template
-                xcorr = np.zeros(tr1.stats.npts - template[0].stats.npts + 1)
+                # Initialize xcorr and xcorrfull for the current station and template
+                xcorrfull = np.zeros((len(st), tr1.stats.npts - template[0].stats.npts + 1))
+                xcorr_template = np.zeros(tr1.stats.npts - template[0].stats.npts + 1)
         
                 # Calculate cross-correlation using the current template
                 for j, tr2 in enumerate(template):
@@ -122,14 +122,17 @@ for batch_idx, template_group in enumerate(template_groups):
                         tr1.data, tr2.data,
                         mode='valid', normalize='full', demean=True, method='auto'
                     )
-                    xcorr += xcorr_template
+                    xcorrfull[j,:] += xcorr_template
 
-                del template, xcorr_template
+                xcorrmean=np.mean(xcorrfull,axis=0)
+                
+                # Release memory
+                del template, xcorr_template, xcorrfull
                 
                 # Find indices where the cross-correlation values are above the threshold
-                mad = np.median(np.abs(xcorr - np.median(xcorr)))
+                mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
                 thresh = 8
-                aboves = np.where(xcorr > thresh * mad)
+                aboves = np.where(xcorrmean > thresh * mad)
         
                 # Extract station and template information
                 station = tr1.stats.station
@@ -139,16 +142,14 @@ for batch_idx, template_group in enumerate(template_groups):
                 crosscorr_combination = (
                     f'{station}_{channel}_templ{template_index}'
                 )
-                #print(crosscorr_combination)
                 
                 # Append the values to the file threshold.txt
-                crosscorr_tools.append_to_file(file_path, thresh * mad, np.max(xcorr))
+                crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
                 
                 # Calculate the duration of the data in seconds for the plot
                 stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
     
                 if aboves[0].size == 0:
-                    #print("No significant correlations found")
                     info_lines.append(f"{crosscorr_combination}:"
                                       f" No significant correlations found")
                 else:
@@ -159,13 +160,13 @@ for batch_idx, template_group in enumerate(template_groups):
                     )
                     windowlen=tr2.stats.npts
                     fig, ax = plt.subplots(figsize=(10,3))
-                    t=st[0].stats.delta*np.arange(len(xcorr))
-                    ax.plot(t,xcorr)
+                    t=st[0].stats.delta*np.arange(len(xcorrmean))
+                    ax.plot(t,xcorrmean)
                     ax.axhline(thresh*mad,color='red')
-                    inds=np.where(xcorr>thresh*mad)[0]
+                    inds=np.where(xcorrmean>thresh*mad)[0]
                     clusters=autocorr_tools.clusterdects(inds,windowlen)
-                    newdect=autocorr_tools.culldects(inds,clusters,xcorr)
-                    ax.plot(newdect*st[0].stats.delta,xcorr[newdect],'kx')
+                    newdect=autocorr_tools.culldects(inds,clusters,xcorrmean)
+                    ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
                     ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=16,color='red')
                     ax.set_xlabel('Time', fontsize=14)
                     ax.set_ylabel('Correlation Coefficient', fontsize=14)
@@ -179,7 +180,7 @@ for batch_idx, template_group in enumerate(template_groups):
 
     except Exception as e:
         # Handle exceptions or errors here
-        print(f"An error occurred: {e}")
+        print(f"An error occurred processing template {idx}: {e}")
     
     finally:
         # Calculate and print script execution time
