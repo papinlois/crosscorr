@@ -166,8 +166,11 @@ for batch_idx, template_group in enumerate(template_groups):
                     inds=np.where(xcorrmean>thresh*mad)[0]
                     clusters=autocorr_tools.clusterdects(inds,windowlen)
                     newdect=autocorr_tools.culldects(inds,clusters,xcorrmean)
+                    max_index = np.argmax(xcorrmean[newdect])
                     ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
-                    ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=16,color='red')
+                    ax.plot((newdect*st[0].stats.delta)[max_index],
+                            (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
+                    ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
                     ax.set_xlabel('Time', fontsize=14)
                     ax.set_ylabel('Correlation Coefficient', fontsize=14)
                     ax.set_xlim(0, stream_duration)
@@ -199,6 +202,6 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
     
-        # Plot the threshold values
-        file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
-        crosscorr_tools.plot_scatter_from_file(file_path)
+# Plot the threshold values
+file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
+crosscorr_tools.plot_scatter_from_file(file_path)
