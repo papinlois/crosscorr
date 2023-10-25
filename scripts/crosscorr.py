@@ -35,7 +35,7 @@ channels = ['BHE']
 stations_used = ", ".join(stas)
 
 # Hour and date of interest
-date_of_interest = "20100516"
+date_of_interest = "20100518"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
@@ -171,9 +171,10 @@ for batch_idx, template_group in enumerate(template_groups):
                     ax.plot((newdect*st[0].stats.delta)[max_index],
                             (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
                     ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
-                    ax.set_xlabel('Time', fontsize=14)
+                    ax.set_xlabel('Time (s)', fontsize=14)
                     ax.set_ylabel('Correlation Coefficient', fontsize=14)
                     ax.set_xlim(0, stream_duration)
+                    ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
                     plt.gcf().subplots_adjust(bottom=0.2)
                     plt.savefig(correlation_plot_filename)
                     plt.close()
@@ -202,6 +203,6 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
     
-# Plot the threshold values
-file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
-crosscorr_tools.plot_scatter_from_file(file_path)
+        # Plot the threshold values
+        file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
+        crosscorr_tools.plot_scatter_from_file(file_path)

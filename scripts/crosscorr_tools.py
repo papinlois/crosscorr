@@ -173,7 +173,7 @@ def plot_data(st, stas, channels):
             plt.plot(time_in_seconds, tr.data / norm + offset,
                       color=color, label=f"{sta}_{cha}")
             offset += nb
-    plt.xlabel('Time (seconds)', fontsize=14)
+    plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Full day of {start_date}', fontsize=16)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)

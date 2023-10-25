@@ -177,12 +177,12 @@ df_full_memory = asizeof.asizeof(df_full)
 templates_memory = asizeof.asizeof(templates)
 
 # Calculate the total memory consumption for tr
-tr_memory = asizeof.asizeof(tr)
+max_index_memory = asizeof.asizeof(max_index)
 
 # Calculate the total memory consumption for st
 st_memory = asizeof.asizeof(st)
 
 print(f"Memory Consumption for df_full: {df_full_memory / (1024 * 1024):.2f} MB")
 print(f"Memory Consumption for templates: {templates_memory / (1024 * 1024):.2f} MB")
-print(f"Memory Consumption for tr: {tr_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for max_index: {max_index_memory / (1024 * 1024):.2f} MB")
 print(f"Memory Consumption for st: {st_memory / (1024 * 1024):.2f} MB")
