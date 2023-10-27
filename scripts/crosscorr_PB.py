@@ -20,38 +20,37 @@ import crosscorr_tools
 
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
-locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
-crosscorr_tools.plot_station_locations(locs)
+locs = locfile[['Name', 'Longitude', 'Latitude']].values
+# crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
 startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-stas = ['LZB','SNB','PGC']#,'NLLB']
-channels = ['BHE']
+stas = ['B001','B009','B010','B011','B926']
+channels = ['EH2']
 
 # Get the list of stations used
 stations_used = ", ".join(stas)
 
 # Hour and date of interest
-date_of_interest = "20100519"
+date_of_interest = "20100518"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
+day_of_year = startdate.timetuple().tm_yday
+year = startdate.timetuple().tm_year
 
-def get_traces(stas, channels): # Use less of memory with the yield
-    for sta in stas:
-        for cha in channels:
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
-            try:
-                tr = read(file)[0]
-                print("Loaded data:", tr)
-                yield tr
-            except FileNotFoundError:
-                print(f"File {file} not found.")
-
-st = Stream(traces=get_traces(stas, channels))
+st = Stream()
+for sta in stas:
+        path = "C:/Users/papin/Desktop/phd/data/seed"
+        file = f"{path}/{sta}.PB.{year}.{day_of_year}"
+        try:
+            tr = read(file)[1]
+            st.append(tr)
+            print("Loaded data:", tr)
+        except FileNotFoundError:
+            print(f"File {file} not found.")
 
 # Preprocessing: Interpolation, trimming, detrending, and filtering
 start = st[0].stats.starttime
@@ -59,6 +58,8 @@ end = st[0].stats.endtime
 for tr in st: # In case of different time frame of streams
     start = max(start, tr.stats.starttime)
     end = min(end, tr.stats.endtime)
+print('\n The data will be from', start.hour, 'to', end.hour)
+input("Press Enter to continue...")
 del tr
 st.interpolate(sampling_rate=80, starttime=start) # Can be modified
 st.trim(starttime=start,endtime=end, fill_value=0)
@@ -68,11 +69,11 @@ st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
 # Call the function to plot the data
 cha=crosscorr_tools.plot_data(st, stas, channels)
 
-# Add locations
-for ii, sta in enumerate(stas):
-    ind = np.where(locs[:, 0] == sta)
-    st[ii].stats.y = locs[ind, 1][0][0]
-    st[ii].stats.x = locs[ind, 2][0][0]
+# # Add locations
+# for ii, sta in enumerate(stas):
+#     ind = np.where(locs[:, 0] == sta)
+#     st[ii].stats.y = locs[ind, 1][0][0]
+#     st[ii].stats.x = locs[ind, 2][0][0]
 
 # Define the path to save threshold and xcorr values later
 file_path = "C:/Users/papin/Desktop/phd/threshold.txt"
@@ -164,9 +165,12 @@ for batch_idx, template_group in enumerate(template_groups):
                     t=st[0].stats.delta*np.arange(len(xcorrmean))
                     ax.plot(t,xcorrmean)
                     ax.axhline(thresh*mad,color='red')
+                    # Plot the new detected events (above the threshold)
                     inds=np.where(xcorrmean>thresh*mad)[0]
                     clusters=autocorr_tools.clusterdects(inds,windowlen)
                     newdect=autocorr_tools.culldects(inds,clusters,xcorrmean)
+                    # Differenciate the event template 
+                    # (! not always the maximum value)
                     max_index = np.argmax(xcorrmean[newdect])
                     ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
                     ax.plot((newdect*st[0].stats.delta)[max_index],

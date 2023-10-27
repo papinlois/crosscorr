@@ -28,9 +28,15 @@ def plot_station_locations(locs):
         None
     """
     plt.figure()
-    plt.plot(locs[:, 1], locs[:, 2], 'bo')
-    for name, lon, lat in locs:
+    
+    # Separate stations by network and plot them in different colors
+    for name, lon, lat, network in locs:
+        if network == 'CN':
+            plt.plot(lon, lat, 'bo')
+        elif network == 'PB':
+            plt.plot(lon, lat, 'ro')
         plt.text(lon, lat, name)
+        
     plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
     plt.close()
 
