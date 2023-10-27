@@ -1,16 +1,18 @@
-# Cross-Correlation Analysis for Seismic Data
+# Cross-Correlation and Template Matching with ObsPy
 
-This repository contains a Python script for performing cross-correlation analysis on seismic data from multiple stations. The script reads seismic data files, preprocesses the data, calculates cross-correlations between different station pairs, and identifies significant correlations.
+This is a Python script for performing cross-correlation and template matching with ObsPy on seismic data. The script takes a set of seismic traces and a collection of seismic templates, and it calculates cross-correlations to detect seismic events. The script also generates various plots and outputs relevant information.
 
-## Overview
+## Table of Contents
 
-The script provided in this repository performs the following tasks:
+- [Introduction](#introduction)
+- [Usage](#usage)
+- [Script Overview](#script-overview)
+- [Output Files](#output-files)
+- [Author](#author)
 
-1. Load seismic data from specified stations and channels.
-2. Preprocess the data, including interpolation, trimming, detrending, and filtering.
-3. Calculate cross-correlations between different station pairs.
-4. Identify significant correlations based on a threshold (8 times the Median Absolute Deviation).
-5. Save detection plots and correlation function plots for further analysis.
+## Introduction
+
+This script is designed to analyze seismic data and detect seismic events by performing cross-correlation between the data and a collection of seismic templates. It utilizes ObsPy, a Python toolbox for seismology, to process and analyze seismic waveforms.
 
 ## Usage
 
@@ -48,6 +50,28 @@ To use the script, follow these steps:
 
 8. Results, including significant correlation values, will be saved in a `results.txt` file.
 
-## Acknowledgments
+## Script Overview
 
-This code uses the ObsPy library for seismological data analysis.
+1. **Data Ingestion**: It reads seismic data from the specified files, ensuring you have the right seismic dataset at your disposal.
+
+2. **Data Preprocessing**: The script prepares the data by interpolating, trimming, detrending, and filtering. 
+
+3. **Template Matching**: Seismic templates are loaded, and the script iterates through these templates and stations to calculate cross-correlations. 
+
+4. **Significant Event Detection**: The script identifies significant correlations and generates plots to visualize these events. 
+
+5. **Output Generation**: The script produces informative files and reports containing data about the detected events and the script's execution time.
+
+## Output Files
+
+The script generates a variety of output files, including:
+
+- `threshold.txt`: This file contains threshold and maximum cross-correlation values, offering insights into the significance of the detected events.
+
+- `info.txt`: An information-rich report that encompasses essential details about the script's execution, the date range analyzed, the stations and channels used, templates, and non-significant correlations.
+
+- Correlation plots: Visual representations of significant events, helping you visualize the correlation between templates and seismic data.
+
+## Author
+
+This script was crafted by [papin](https://github.com/papin), and it is made available as an open-source tool to advance seismic data analysis. Feel free to adapt and enhance the script to meet your specific research needs. If you encounter questions or require assistance, please don't hesitate to reach out to the author through their GitHub profile for guidance and support.
