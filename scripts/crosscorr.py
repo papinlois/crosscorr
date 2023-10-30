@@ -21,21 +21,21 @@ import crosscorr_tools
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
 locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
-crosscorr_tools.plot_station_locations(locs)
+# crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
 startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-stas = ['LZB','SNB','PGC']#,'NLLB']
-channels = ['BHE']
+stas = ['PFB','YOUB']
+channels = ['HHE']
 
 # Get the list of stations used
 stations_used = ", ".join(stas)
 
 # Hour and date of interest
-date_of_interest = "20100519"
+date_of_interest = "20100517"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
@@ -160,25 +160,28 @@ for batch_idx, template_group in enumerate(template_groups):
                         f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
                     )
                     windowlen=tr2.stats.npts
-                    fig, ax = plt.subplots(figsize=(10,3))
-                    t=st[0].stats.delta*np.arange(len(xcorrmean))
-                    ax.plot(t,xcorrmean)
-                    ax.axhline(thresh*mad,color='red')
                     inds=np.where(xcorrmean>thresh*mad)[0]
                     clusters=autocorr_tools.clusterdects(inds,windowlen)
                     newdect=autocorr_tools.culldects(inds,clusters,xcorrmean)
-                    max_index = np.argmax(xcorrmean[newdect])
-                    ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
-                    ax.plot((newdect*st[0].stats.delta)[max_index],
-                            (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
-                    ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
-                    ax.set_xlabel('Time (s)', fontsize=14)
-                    ax.set_ylabel('Correlation Coefficient', fontsize=14)
-                    ax.set_xlim(0, stream_duration)
-                    ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
-                    plt.gcf().subplots_adjust(bottom=0.2)
-                    plt.savefig(correlation_plot_filename)
-                    plt.close()
+                    if newdect.size > 1: # Plot only if there are new events (help for the memory)
+                        fig, ax = plt.subplots(figsize=(10,3))
+                        t=st[0].stats.delta*np.arange(len(xcorrmean))
+                        ax.plot(t,xcorrmean)
+                        ax.axhline(thresh*mad,color='red')
+                        max_index = np.argmax(xcorrmean[newdect])
+                        ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
+                        ax.plot((newdect*st[0].stats.delta)[max_index],
+                                (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
+                        ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
+                        ax.set_xlabel('Time (s)', fontsize=14)
+                        ax.set_ylabel('Correlation Coefficient', fontsize=14)
+                        ax.set_xlim(0, stream_duration)
+                        ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
+                        plt.gcf().subplots_adjust(bottom=0.2)
+                        plt.savefig(correlation_plot_filename)
+                        plt.close()
+                    else:
+                        del xcorrmean
         
         # Follow the advancement
         print(f"Processed batch {batch_idx + 1}/{len(template_groups)}")
@@ -204,6 +207,6 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
     
-        # Plot the threshold values
-        file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
-        crosscorr_tools.plot_scatter_from_file(file_path)
+        # # Plot the threshold values
+        # file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
+        # crosscorr_tools.plot_scatter_from_file(file_path)
