@@ -142,8 +142,8 @@ for batch_idx, template_group in enumerate(template_groups):
                     f'{station}_{channel}_templ{template_index}'
                 )
                 
-                # # Append the values to the file threshold.txt
-                # crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
+                # Append the values to the file threshold.txt
+                crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
                 
                 # Calculate the duration of the data in seconds for the plot
                 stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
@@ -181,6 +181,6 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
     
-        # # Plot the threshold values
-        # file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
-        # crosscorr_tools.plot_scatter_from_file(file_path)
+        # Plot the threshold values
+        file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
+        crosscorr_tools.plot_scatter_from_file(file_path)
