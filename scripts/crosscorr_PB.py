@@ -10,9 +10,9 @@ Functions are from autocorrelation and crosscorrelation tools
 import os
 import time
 from datetime import datetime, timedelta
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from obspy.core import Stream, read
 import autocorr_tools
@@ -20,7 +20,7 @@ import crosscorr_tools
 
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
-locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
+locs = locfile[['Name', 'Longitude', 'Latitude']].values
 # crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
@@ -28,30 +28,29 @@ startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-stas = ['PFB','YOUB'] 
-channels = ['HHE']
+stas = ['B001','B009','B010','B011']#,'B926']
+channels = ['EH2']
 
 # Get the list of stations used
 stations_used = ", ".join(stas)
 
 # Hour and date of interest
-date_of_interest = "20100519"
+date_of_interest = "20100516"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
+day_of_year = startdate.timetuple().tm_yday
+year = startdate.timetuple().tm_year
 
-def get_traces(stas, channels): # Use less of memory with the yield
-    for sta in stas:
-        for cha in channels:
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
-            try:
-                tr = read(file)[0]
-                print("Loaded data:", tr)
-                yield tr
-            except FileNotFoundError:
-                print(f"File {file} not found.")
-
-st = Stream(traces=get_traces(stas, channels))
+st = Stream()
+for sta in stas:
+        path = "C:/Users/papin/Desktop/phd/data/seed"
+        file = f"{path}/{sta}.PB.{year}.{day_of_year}"
+        try:
+            tr = read(file)[1]
+            st.append(tr)
+            print("Loaded data:", tr)
+        except FileNotFoundError:
+            print(f"File {file} not found.")
 
 # Preprocessing: Interpolation, trimming, detrending, and filtering
 start = st[0].stats.starttime
@@ -59,6 +58,8 @@ end = st[0].stats.endtime
 for tr in st: # In case of different time frame of streams
     start = max(start, tr.stats.starttime)
     end = min(end, tr.stats.endtime)
+print('\n The data will be from', start.hour, 'to', end.hour)
+input("Press Enter to continue...")
 del tr
 st.interpolate(sampling_rate=80, starttime=start) # Can be modified
 st.trim(starttime=start,endtime=end, fill_value=0)
@@ -68,11 +69,11 @@ st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
 # Call the function to plot the data
 cha=crosscorr_tools.plot_data(st, stas, channels)
 
-# Add locations
-for ii, sta in enumerate(stas):
-    ind = np.where(locs[:, 0] == sta)
-    st[ii].stats.y = locs[ind, 1][0][0]
-    st[ii].stats.x = locs[ind, 2][0][0]
+# # Add locations
+# for ii, sta in enumerate(stas):
+#     ind = np.where(locs[:, 0] == sta)
+#     st[ii].stats.y = locs[ind, 1][0][0]
+#     st[ii].stats.x = locs[ind, 2][0][0]
 
 # Define the path to save threshold and xcorr values later
 file_path = "C:/Users/papin/Desktop/phd/threshold.txt"
@@ -99,7 +100,7 @@ templates.index.name = 'Index'
 info_lines = []  # Store lines of information
 
 # Split the templates into groups of 20
-template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
+template_groups = [templates[i:i + 20] for i in range(60, len(templates), 20)]
 
 # Process templates in batches of 20
 for batch_idx, template_group in enumerate(template_groups):
@@ -108,7 +109,6 @@ for batch_idx, template_group in enumerate(template_groups):
         for tr1 in st:
             # Iterate over all templates
             for idx, template_stats in template_group.iterrows():
-                print(idx)
                 template_stats = templates.iloc[idx]
                 start = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
                 end = UTCDateTime(template_stats['datetime'] + timedelta(seconds=40))
@@ -125,7 +125,7 @@ for batch_idx, template_group in enumerate(template_groups):
                         mode='valid', normalize='full', demean=True, method='auto'
                     )
                     xcorrfull[j,:] += xcorr_template
-                
+
                 xcorrmean=np.mean(xcorrfull,axis=0)
                 
                 # Release memory
@@ -136,10 +136,11 @@ for batch_idx, template_group in enumerate(template_groups):
                 thresh = 8
                 aboves = np.where(xcorrmean > thresh * mad)
         
-                # Construct a filename
+                # Extract station and template information
                 station = tr1.stats.station
                 channel = tr1.stats.channel
                 template_index = idx
+                # Construct a filename based on station combinations and template_index
                 crosscorr_combination = (
                     f'{station}_{channel}_templ{template_index}'
                 )
