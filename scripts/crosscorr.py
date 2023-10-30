@@ -10,7 +10,6 @@ Functions are from autocorrelation and crosscorrelation tools
 import os
 import time
 from datetime import datetime, timedelta
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from obspy import UTCDateTime
@@ -124,7 +123,7 @@ for batch_idx, template_group in enumerate(template_groups):
                         mode='valid', normalize='full', demean=True, method='auto'
                     )
                     xcorrfull[j,:] += xcorr_template
-
+                
                 xcorrmean=np.mean(xcorrfull,axis=0)
                 
                 # Release memory
@@ -135,17 +134,16 @@ for batch_idx, template_group in enumerate(template_groups):
                 thresh = 8
                 aboves = np.where(xcorrmean > thresh * mad)
         
-                # Extract station and template information
+                # Construct a filename
                 station = tr1.stats.station
                 channel = tr1.stats.channel
                 template_index = idx
-                # Construct a filename based on station combinations and template_index
                 crosscorr_combination = (
                     f'{station}_{channel}_templ{template_index}'
                 )
                 
-                # Append the values to the file threshold.txt
-                crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
+                # # Append the values to the file threshold.txt
+                # crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
                 
                 # Calculate the duration of the data in seconds for the plot
                 stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
@@ -154,34 +152,10 @@ for batch_idx, template_group in enumerate(template_groups):
                     info_lines.append(f"{crosscorr_combination}:"
                                       f" No significant correlations found")
                 else:
-                    # Creation of the cross-correlation plot
-                    correlation_plot_filename = (
-                        f'C:/Users/papin/Desktop/phd/plots/'
-                        f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
-                    )
-                    windowlen=tr2.stats.npts
-                    inds=np.where(xcorrmean>thresh*mad)[0]
-                    clusters=autocorr_tools.clusterdects(inds,windowlen)
-                    newdect=autocorr_tools.culldects(inds,clusters,xcorrmean)
-                    if newdect.size > 1: # Plot only if there are new events (help for the memory)
-                        fig, ax = plt.subplots(figsize=(10,3))
-                        t=st[0].stats.delta*np.arange(len(xcorrmean))
-                        ax.plot(t,xcorrmean)
-                        ax.axhline(thresh*mad,color='red')
-                        max_index = np.argmax(xcorrmean[newdect])
-                        ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
-                        ax.plot((newdect*st[0].stats.delta)[max_index],
-                                (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
-                        ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
-                        ax.set_xlabel('Time (s)', fontsize=14)
-                        ax.set_ylabel('Correlation Coefficient', fontsize=14)
-                        ax.set_xlim(0, stream_duration)
-                        ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
-                        plt.gcf().subplots_adjust(bottom=0.2)
-                        plt.savefig(correlation_plot_filename)
-                        plt.close()
-                    else:
-                        del xcorrmean
+                    # Plot of the cross-correlation function
+                    crosscorr_tools.plot_crosscorrelation(xcorrmean, thresh, mad, st, stream_duration, 
+                                              crosscorr_combination, date_of_interest)
+                    del xcorrmean
         
         # Follow the advancement
         print(f"Processed batch {batch_idx + 1}/{len(template_groups)}")

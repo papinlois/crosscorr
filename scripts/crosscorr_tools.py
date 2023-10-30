@@ -10,7 +10,6 @@ import pandas as pd
 import math
 import matplotlib.pyplot as plt
 import matplotlib.colorbar as clrbar
-from scipy import stats
 import autocorr_tools
 
 def plot_station_locations(locs):
@@ -110,42 +109,6 @@ def create_detection_plot(aboves, xcorrmean, detection_plot_filename):
     plt.savefig(detection_plot_filename)
     plt.close()
 
-def plot_cross_correlation(xcorrmean, aboves, thresh, mad, windowlen, st, hour_of_interest, date_of_interest, correlation_function_plot_filename):
-    """
-    Plot the cross-correlation function with template.
-
-    Parameters:
-        xcorrmean (numpy.ndarray): 2D array containing cross-correlation values.
-        aboves (tuple): Tuple of arrays containing significant correlation indices.
-        thresh (float): Threshold value.
-        mad (float): Median absolute deviation.
-        windowlen (int): Template window length in points.
-        st (obspy.core.stream.Stream): ObsPy stream object containing the data.
-        hour_of_interest (int): The specific hour of interest.
-        date_of_interest (str): The date of interest (in the format "YYYYMMDD").
-        correlation_function_plot_filename (str): Path to save the plot.
-
-    Returns:
-        None
-    """
-    winind = stats.mode(aboves[0], keepdims=False)[0]  # Most common value (template)
-    xcorr = xcorrmean[winind, :]
-    _, ax = plt.subplots(figsize=(10, 3))
-    t = st[0].stats.delta * np.arange(len(xcorr))
-    ax.plot(t, xcorr)
-    ax.axhline(thresh * mad, color='red')
-    inds = np.where(xcorr > thresh * mad)[0]
-    clusters = autocorr_tools.clusterdects(inds, windowlen)
-    newdect = autocorr_tools.culldects(inds, clusters, xcorr)
-    ax.plot(newdect * st[0].stats.delta, xcorr[newdect], 'kx')
-    ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=16, color='red')
-    ax.set_xlabel(f'Seconds of Hour {hour_of_interest} on {date_of_interest}', fontsize=14)
-    ax.set_ylabel('Correlation Coefficient', fontsize=14)
-    ax.set_xlim((0, 3600))
-    plt.gcf().subplots_adjust(bottom=0.2)
-    plt.savefig(correlation_function_plot_filename)
-    plt.close()
-
 def plot_data(st, stas, channels):
     """
     Plot station data.
@@ -229,3 +192,33 @@ def plot_scatter_from_file(file_path):
     plt.ylabel('Values of Correlation')
     plt.legend()
     plt.show()
+
+def plot_crosscorrelation(xcorrmean, thresh, mad, st, stream_duration, 
+                          crosscorr_combination, date_of_interest):
+    windowlen = st[0].stats.npts
+    inds = np.where(xcorrmean > thresh * mad)[0]
+    clusters = autocorr_tools.clusterdects(inds, windowlen)
+    newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
+    max_index = np.argmax(xcorrmean[newdect])
+    
+    correlation_plot_filename = (
+        f'C:/Users/papin/Desktop/phd/plots/'
+        f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
+    )
+    
+    # Creation of the cross-correlation plot
+    fig, ax = plt.subplots(figsize=(10, 3))
+    t = st[0].stats.delta * np.arange(len(xcorrmean))
+    ax.plot(t, xcorrmean)
+    ax.axhline(thresh * mad, color='red')
+    ax.plot(newdect * st[0].stats.delta, xcorrmean[newdect], 'kx')
+    ax.plot((newdect * st[0].stats.delta)[max_index], 
+            (xcorrmean[newdect])[max_index], 'gx', markersize=10, linewidth=10)
+    ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=14, color='red')
+    ax.set_xlabel('Time (s)', fontsize=14)
+    ax.set_ylabel('Correlation Coefficient', fontsize=14)
+    ax.set_xlim(0, stream_duration)
+    ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
+    plt.gcf().subplots_adjust(bottom=0.2)
+    plt.savefig(correlation_plot_filename)
+    plt.close()
