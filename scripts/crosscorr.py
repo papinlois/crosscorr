@@ -29,19 +29,19 @@ startscript = time.time()
 # List of stations/channels to analyze
 # CN network
 stas = ['PFB','YOUB'] 
-channels = ['HHE']
-
-# Get the list of stations used
-stations_used = ", ".join(stas)
+channels = ['HHN','HHE','HHZ']
 
 # Hour and date of interest
-date_of_interest = "20100519"
+date_of_interest = "20100516"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
+# Call the function to plot all the data 
+network = crosscorr_tools.plot_data(date_of_interest, stas, channels)
+
 def get_traces(stas, channels): # Use less of memory with the yield
-    for sta in stas:
-        for cha in channels:
+    for cha in channels:
+        for sta in stas:
             path = "C:/Users/papin/Desktop/phd/data/seed"
             file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
             try:
@@ -50,37 +50,22 @@ def get_traces(stas, channels): # Use less of memory with the yield
                 yield tr
             except FileNotFoundError:
                 print(f"File {file} not found.")
-
 st = Stream(traces=get_traces(stas, channels))
 
 # Preprocessing: Interpolation, trimming, detrending, and filtering
-start = st[0].stats.starttime
-end = st[0].stats.endtime
-for tr in st: # In case of different time frame of streams
-    start = max(start, tr.stats.starttime)
-    end = min(end, tr.stats.endtime)
-del tr
-st.interpolate(sampling_rate=80, starttime=start) # Can be modified
-st.trim(starttime=start,endtime=end, fill_value=0)
-st.detrend(type='simple')
-st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
-
-# Call the function to plot the data
-cha=crosscorr_tools.plot_data(st, stas, channels)
+start = max(tr.stats.starttime for tr in st)
+end = min(tr.stats.endtime for tr in st)
+for tr in st:
+    tr.trim(starttime=start, endtime=end, fill_value=0)
+    tr.interpolate(sampling_rate=80, starttime=start)
+    tr.detrend(type='simple')
+    tr.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
 # Add locations
-for ii, sta in enumerate(stas):
+for sta_idx, sta in enumerate(stas):
     ind = np.where(locs[:, 0] == sta)
-    st[ii].stats.y = locs[ind, 1][0][0]
-    st[ii].stats.x = locs[ind, 2][0][0]
-
-# Define the path to save threshold and xcorr values later
-file_path = "C:/Users/papin/Desktop/phd/threshold.txt"
-
-# Check if the file already exists, if not, create a new one with headers
-if not os.path.isfile(file_path):
-    with open(file_path, "w", encoding='utf-8') as file:
-        file.write("Thresh * Mad\tMax xcorr\n")
+    st[sta_idx].stats.y = locs[ind, 1][0][0]
+    st[sta_idx].stats.x = locs[ind, 2][0][0]
 
 # Load LFE data on Tim's catalog
 df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -90,10 +75,10 @@ templates = df_full[(df_full['datetime'] >= start.datetime)
                    & (df_full['datetime'] < end.datetime) 
                    & (df_full['residual'] < 0.1)]
 templates = templates.drop(columns=['dates', 'N'])
-del df_full # too big to keep and useless
 # Add a new column for the index of the lines (for output file)
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
+del df_full # too big to keep and useless
 
 # Collect information
 info_lines = []  # Store lines of information
@@ -104,92 +89,79 @@ template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
 # Process templates in batches of 20
 for batch_idx, template_group in enumerate(template_groups):
     try:
-        # Iterate over all stations
-        for tr1 in st:
-            # Iterate over all templates
-            for idx, template_stats in template_group.iterrows():
-                print(idx)
+        # Iterate over all templates
+        for idx, template_stats in template_group.iterrows():
+            # Iterate over all stations and channels
+            xcorr_templates = []
+            for tr1 in st:
                 template_stats = templates.iloc[idx]
                 start = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
                 end = UTCDateTime(template_stats['datetime'] + timedelta(seconds=40))
-                template = st.copy().trim(starttime=start, endtime=end)
-                
-                # Initialize xcorr and xcorrfull for the current station and template
-                xcorrfull = np.zeros((len(st), tr1.stats.npts - template[0].stats.npts + 1))
-                xcorr_template = np.zeros(tr1.stats.npts - template[0].stats.npts + 1)
-        
-                # Calculate cross-correlation using the current template
-                for j, tr2 in enumerate(template):
-                    xcorr_template = autocorr_tools.correlate_template(
-                        tr1.data, tr2.data,
-                        mode='valid', normalize='full', demean=True, method='auto'
-                    )
-                    xcorrfull[j,:] += xcorr_template
-                
-                xcorrmean=np.mean(xcorrfull,axis=0)
-                
-                # Release memory
-                del template, xcorr_template, xcorrfull
-                
-                # Find indices where the cross-correlation values are above the threshold
-                mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
-                thresh = 8
-                aboves = np.where(xcorrmean > thresh * mad)
-        
-                # Construct a filename
-                station = tr1.stats.station
-                channel = tr1.stats.channel
-                template_index = idx
-                crosscorr_combination = (
-                    f'{station}_{channel}_templ{template_index}'
+                template = tr1.copy().trim(starttime=start, endtime=end)
+    
+                xcorr_template = autocorr_tools.correlate_template(
+                    tr1.data, template.data,
+                    mode='valid', normalize='full', demean=True, method='auto'
+                )
+                xcorr_templates.append(xcorr_template)
+            
+            xcorrfull = np.vstack(xcorr_templates)        
+            xcorrmean=np.mean(xcorrfull,axis=0)
+            
+            del xcorr_template, xcorr_templates, xcorrfull
+            
+            # Find indices where the cross-correlation values are above the threshold
+            mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
+            thresh = 8
+            aboves = np.where(xcorrmean > thresh * mad)
+    
+            # Construct a filename
+            template_index = idx
+            crosscorr_combination = f'net{network}_templ{template_index}'
+            
+            # Calculate the duration of the data in seconds for the plot
+            stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
+
+            if aboves[0].size == 0:
+                info_lines.append(f"{crosscorr_combination}:"
+                                  f" No significant correlations found")
+            else:
+                correlation_plot_filename = (
+                    f'C:/Users/papin/Desktop/phd/plots/'
+                    f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
                 )
                 
-                # Append the values to the file threshold.txt
-                crosscorr_tools.append_to_file(file_path, thresh * mad,np.max(xcorrmean))
-                
-                # Calculate the duration of the data in seconds for the plot
-                stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
+                # Calculate the window length for clustering
+                windowlen = template.stats.npts
+                # Find indices where the cross-correlation values are above the threshold
+                inds = np.where(xcorrmean > thresh * mad)[0]
+                # Cluster the detected events
+                clusters = autocorr_tools.clusterdects(inds, windowlen)
+                # Cull detections within clusters
+                newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
+                # Find the index of the maximum value in newdect
+                max_index = np.argmax(xcorrmean[newdect])
     
-                if aboves[0].size == 0:
-                    info_lines.append(f"{crosscorr_combination}:"
-                                      f" No significant correlations found")
+                # Creation of the cross-correlation plot only if new events detected
+                if newdect.size > 1: 
+                    fig, ax = plt.subplots(figsize=(10,3))
+                    t=st[0].stats.delta*np.arange(len(xcorrmean))
+                    ax.plot(t,xcorrmean)
+                    ax.axhline(thresh*mad,color='red')
+                    ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
+                    ax.plot((newdect*st[0].stats.delta)[max_index],
+                            (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
+                    ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
+                    ax.set_xlabel('Time (s)', fontsize=14)
+                    ax.set_ylabel('Correlation Coefficient', fontsize=14)
+                    ax.set_xlim(0, stream_duration)
+                    ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
+                    plt.gcf().subplots_adjust(bottom=0.2)
+                    plt.savefig(correlation_plot_filename)
+                    plt.close()
+                    del xcorrmean, t, fig, ax
                 else:
-                    correlation_plot_filename = (
-                        f'C:/Users/papin/Desktop/phd/plots/'
-                        f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
-                    )
-                    
-                    # Calculate the window length for clustering
-                    windowlen = tr2.stats.npts
-                    # Find indices where the cross-correlation values are above the threshold
-                    inds = np.where(xcorrmean > thresh * mad)[0]
-                    # Cluster the detected events
-                    clusters = autocorr_tools.clusterdects(inds, windowlen)
-                    # Cull detections within clusters
-                    newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
-                    # Find the index of the maximum value in newdect
-                    max_index = np.argmax(xcorrmean[newdect])
-
-                    # Creation of the cross-correlation plot only if new events detected
-                    if newdect.size > 1: 
-                        fig, ax = plt.subplots(figsize=(10,3))
-                        t=st[0].stats.delta*np.arange(len(xcorrmean))
-                        ax.plot(t,xcorrmean)
-                        ax.axhline(thresh*mad,color='red')
-                        ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
-                        ax.plot((newdect*st[0].stats.delta)[max_index],
-                                (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
-                        ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
-                        ax.set_xlabel('Time (s)', fontsize=14)
-                        ax.set_ylabel('Correlation Coefficient', fontsize=14)
-                        ax.set_xlim(0, stream_duration)
-                        ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
-                        plt.gcf().subplots_adjust(bottom=0.2)
-                        plt.savefig(correlation_plot_filename)
-                        plt.close()
-                        del xcorrmean
-                    else:
-                        del xcorrmean
+                    del xcorrmean
         
         # Follow the advancement
         print(f"Processed batch {batch_idx + 1}/{len(template_groups)}")
@@ -203,18 +175,16 @@ for batch_idx, template_group in enumerate(template_groups):
         end_script = time.time()
         script_execution_time = end_script - startscript
         print(f"Script execution time: {script_execution_time:.2f} seconds")
-        
+        # Get the list of stations and channels used
+        stations_used = ", ".join(stas)
+        channels_used = ", ".join(channels)
         # Create the info.txt file with relevant information
         info_file_path = "C:/Users/papin/Desktop/phd/info.txt"
         with open(info_file_path, 'w', encoding='utf-8') as file:
             file.write(f"Date Range: {startdate} - {enddate}\n\n")
-            file.write(f"Stations and Channel Used: {stations_used} --- {channel}\n\n")
+            file.write(f"Stations and Channel Used: {stations_used} --- {channels_used}\n\n")
             file.write("Templates:\n")
             file.write(templates.to_string() + '\n\n')
             file.write("No significant Correlations:\n")
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
-    
-        # Plot the threshold values
-        file_path = 'C:/Users/papin/Desktop/phd/threshold.txt'
-        crosscorr_tools.plot_scatter_from_file(file_path)
