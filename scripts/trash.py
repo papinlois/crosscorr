@@ -177,12 +177,32 @@ df_full_memory = asizeof.asizeof(df_full)
 templates_memory = asizeof.asizeof(templates)
 
 # Calculate the total memory consumption for tr
-max_index_memory = asizeof.asizeof(max_index)
+xcorrmean_memory = asizeof.asizeof(xcorrmean)
 
 # Calculate the total memory consumption for st
 st_memory = asizeof.asizeof(st)
 
+# Calculate the total memory consumption for st
+fig_memory = asizeof.asizeof(fig)
+
 print(f"Memory Consumption for df_full: {df_full_memory / (1024 * 1024):.2f} MB")
 print(f"Memory Consumption for templates: {templates_memory / (1024 * 1024):.2f} MB")
-print(f"Memory Consumption for max_index: {max_index_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for xcorrmean: {xcorrmean_memory / (1024 * 1024):.2f} MB")
 print(f"Memory Consumption for st: {st_memory / (1024 * 1024):.2f} MB")
+print(f"Memory Consumption for fig: {fig_memory / (1024 * 1024):.2f} MB")
+
+#############################################################################
+
+fig, ax = plt.subplots()
+
+# Iterate over rows and plot each row
+for i in range(xcorrfull.shape[0]):
+    ax.plot(xcorrfull[i,1:100000], label=f'Line {i + 1}')
+ax.plot(xcorrmean[1:100000])
+# Add labels, legend, and title
+ax.set_xlabel('X-axis')
+ax.set_ylabel('Y-axis')
+ax.set_title('Multiple Lines Plot')
+
+# Show the plot
+plt.show()
