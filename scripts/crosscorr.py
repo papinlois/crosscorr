@@ -30,6 +30,7 @@ startscript = time.time()
 # CN network
 stas = ['PFB','YOUB'] 
 channels = ['HHN','HHE','HHZ']
+channel_prefix = channels[0][:2]
 
 # Hour and date of interest
 date_of_interest = "20100516"
@@ -46,7 +47,7 @@ def get_traces(stas, channels): # Use less of memory with the yield
             file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
             try:
                 tr = read(file)[0]
-                print("Loaded data:", tr)
+                # print("Loaded data:", tr)
                 yield tr
             except FileNotFoundError:
                 print(f"File {file} not found.")
@@ -151,6 +152,7 @@ for batch_idx, template_group in enumerate(template_groups):
                     ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
                     ax.plot((newdect*st[0].stats.delta)[max_index],
                             (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
+                    newevent = np.delete(newdect, max_index)*st[0].stats.delta
                     ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
                     ax.set_xlabel('Time (s)', fontsize=14)
                     ax.set_ylabel('Correlation Coefficient', fontsize=14)
@@ -160,9 +162,20 @@ for batch_idx, template_group in enumerate(template_groups):
                     plt.savefig(correlation_plot_filename)
                     plt.close()
                     del xcorrmean, t, fig, ax
+                    
+                    # Create UTCDateTime objects from the newevent values
+                    utc_times = [start.datetime + timedelta(seconds=event) for event in newevent]
+                    # Write the newevent and additional columns to the output file
+                    with open("output.txt", "a") as output_file:
+                        if os.stat("output.txt").st_size == 0:
+                            output_file.write("starttime,templ,channel,network\n")
+                        for utc_time in utc_times:
+                            output_file.write(f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
+                                              f"{idx},{channel_prefix},{network}\n")
                 else:
                     del xcorrmean
-        
+                
+                
         # Follow the advancement
         print(f"Processed batch {batch_idx + 1}/{len(template_groups)}")
 
