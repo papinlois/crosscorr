@@ -7,6 +7,7 @@ Created on Mon Oct 16 14:48:37 2023
 
 import numpy as np
 import pandas as pd
+from datetime import datetime
 import math
 import matplotlib.pyplot as plt
 import matplotlib.colorbar as clrbar
@@ -41,7 +42,7 @@ def plot_station_locations(locs):
     plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
     plt.close()
 
-def plot_data(date_of_interest,stas, channels):
+def plot_data(date_of_interest, stas, channels, network):
     """
     Plot seismic station data for a specific date.
 
@@ -50,6 +51,7 @@ def plot_data(date_of_interest,stas, channels):
         for which you want to plot the data.
         stas (list of str): List of station names.
         channels (list of str): List of channel names.
+        network (str): Network code ('CN' or 'PB').
 
     This function loads seismic data from the specified stations and channels 
     for the given date, preprocesses the data, and plots the normalized traces
@@ -60,27 +62,42 @@ def plot_data(date_of_interest,stas, channels):
     """
     # Initialize an empty Stream to hold the seismic data
     st = Stream()
-   
-    # Load seismic data for the specified stations and channels
-    for sta in stas:
-        for cha in channels:
+
+    if network == 'CN':
+        # Load seismic data for the specified stations and channels (CN network)
+        for sta in stas:
+            for cha in channels:
+                path = "C:/Users/papin/Desktop/phd/data/seed"
+                file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
+                try:
+                    tr = read(file)[0]
+                    st += tr
+                except FileNotFoundError:
+                    print(f"File {file} not found.")
+    elif network == 'PB':
+        # Load seismic data for the specified stations and channels (PB network)
+        for sta in stas:
+            startdate = datetime.strptime(date_of_interest, "%Y%m%d")
+            day_of_year = startdate.timetuple().tm_yday
+            year = startdate.timetuple().tm_year
             path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
+            file = f"{path}/{sta}.{network}.{year}.{day_of_year}"
             try:
-                tr = read(file)[0]
-                st += tr
+                for cha in range(len(channels)):
+                    tr = read(file)[cha]
+                    st += tr
             except FileNotFoundError:
                 print(f"File {file} not found.")
     
     # Preprocessing: Interpolation, trimming, detrending, and filtering
-    start = st[0].stats.starttime
+    start = max(tr.stats.starttime for tr in st)
     st.interpolate(sampling_rate=80, starttime=start) # Can be modified
     st.detrend(type='simple')
     st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
     
     plt.figure(figsize=(15, 5))
     nb = 10 # Distance between plots
-    offset = len(stas)*len(channels)*nb
+    offset = len(stas) * len(channels) * nb
     
     # Get the start date from the first trace in the stream
     start_date = st[0].stats.starttime.strftime("%Y%m%d")
@@ -92,7 +109,7 @@ def plot_data(date_of_interest,stas, channels):
             color = (0, 0.15, 0.5 + shade / 2)
             tr = st[sta_idx * len(channels) + cha_idx]
             time_in_seconds = np.arange(len(tr.data)) * tr.stats.delta
-            norm=np.median(3*np.abs(tr.data))
+            norm = np.median(3 * np.abs(tr.data))
             plt.plot(time_in_seconds, tr.data / norm + offset,
                       color=color, label=f"{sta}_{cha}")
             offset -= nb
@@ -104,9 +121,6 @@ def plot_data(date_of_interest,stas, channels):
     plt.ylim(0, len(stas) * len(channels) * nb + 10)
     plt.savefig(f'C:/Users/papin/Desktop/phd/plots/data_plot_{start_date}.png')
     plt.close()
-    
-    network = st[0].stats.network
-    return network
     
 def append_to_file(filename, thresh_mad, max_xcorr):
     """
