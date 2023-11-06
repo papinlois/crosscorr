@@ -28,8 +28,10 @@ startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-stas = ['PFB','YOUB'] 
-channels = ['HHN','HHE','HHZ']
+# stas = ['PFB', 'YOUB'] 
+# channels = ['HHN', 'HHE', 'HHZ']
+stas = ['LZB','SNB','NLLB','PGC'] 
+channels = ['BHN','BHE','BHZ']
 channel_prefix = channels[0][:2]
 
 # Hour and date of interest
@@ -118,7 +120,7 @@ for batch_idx, template_group in enumerate(template_groups):
     
             # Construct a filename
             template_index = idx
-            crosscorr_combination = f'net{network}_templ{template_index}'
+            crosscorr_combination = f'net{network}_cha{channel_prefix}_templ{template_index}'
             
             # Calculate the duration of the data in seconds for the plot
             stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
