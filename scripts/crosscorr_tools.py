@@ -7,13 +7,13 @@ Created on Mon Oct 16 14:48:37 2023
 
 import numpy as np
 import pandas as pd
-from datetime import datetime
 import math
 import matplotlib.pyplot as plt
 import matplotlib.colorbar as clrbar
 import autocorr_tools
+from obspy import UTCDateTime
 from obspy.core import Stream, read
-
+from datetime import datetime
 
 def plot_station_locations(locs):
     """
@@ -121,48 +121,107 @@ def plot_data(date_of_interest, stas, channels, network):
     plt.ylim(0, len(stas) * len(channels) * nb + 10)
     plt.savefig(f'C:/Users/papin/Desktop/phd/plots/data_plot_{start_date}.png')
     plt.close()
+
+def get_traces(stas, channels, date_of_interest): # Use less of memory with the yield
+    for cha in channels:
+        for sta in stas:
+            path = "C:/Users/papin/Desktop/phd/data/seed"
+            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
+            try:
+                tr = read(file)[0]
+                # print("Loaded data:", tr)
+                yield tr
+            except FileNotFoundError:
+                print(f"File {file} not found.")
+
+def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
+    """
+    Preprocess seismic data and plot summed traces around detected events.
+
+    Args:
+        stas (list): List of station names.
+        channels (list): List of channel names.
+        window_size (int): Time window size in seconds.
+        network (str): Network identifier.
+        channel_prefix (str): Channel prefix.
+        date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+    """
+    # Get the data (so it can be called outside of crosscorr.py)
+    st = Stream(traces=get_traces(stas, channels, date_of_interest))
+    channel_prefix = channels[0][:2]
     
-def append_to_file(filename, thresh_mad, max_xcorr):
-    """
-    Append threshold and maximum cross-correlation values to a text file.
-    """
-    with open(filename, "a", encoding='utf-8') as file:
-        file.write(f"{thresh_mad}\t{max_xcorr}\n")
+    # Preprocessing: Interpolation, trimming, detrending, and filtering
+    start = max(tr.stats.starttime for tr in st)
+    end = min(tr.stats.endtime for tr in st)
+    for tr in st:
+        tr.trim(starttime=start, endtime=end, fill_value=0)
+        tr.interpolate(sampling_rate=80, starttime=start)
+        tr.detrend(type='simple')
+        tr.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
-def plot_scatter_from_file(file_path):
-    """
-    Read data from a file and create a scatter plot.
+    # Define the path to the detections file based on the provided date_of_interest
+    output_file_path = f"C:/Users/papin/Desktop/phd/plots/{network} {channel_prefix} {date_of_interest}/output.txt"
 
-    Parameters:
-        file_path (str): The path to the file containing the data.
+    # Read the output file that contains information about detected events
+    detections_df = pd.read_csv(output_file_path)
 
-    This function reads data from a file, assumes a specific format, and creates
-    a scatter plot based on the read data.
-    """
-    with open(file_path, 'r', encoding='utf-8') as file:
-        lines = file.readlines()
-        thresh_mad_values = []
-        max_xcorr_values = []
-        for line in lines[1:]:  # Skip the header line
-            parts = line.split('\t')
-            thresh_mad_values.append(float(parts[0]))
-            max_xcorr_values.append(float(parts[1]))
+    # Create a list to store the summed traces
+    summed_traces = []
 
-    x_values = range(1, len(thresh_mad_values) + 1)
-    plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
-    plt.scatter(x_values, max_xcorr_values, c='red', label='Max Xcorr')
-    # plt.xticks(range(1, len(x_values) + 1))
-    plt.yticks([i * 0.1 for i in range(6)] + [1])
-    max_y = math.ceil(max(max(thresh_mad_values), max(max_xcorr_values)) / 0.1) * 0.1 + 0.1
-    plt.ylim(0, max_y)
-    plt.grid(axis='x')
-    plt.grid(axis='y', linestyle='--', linewidth=0.5)
-    plt.xlabel('Number')
-    plt.ylabel('Values of Correlation')
-    plt.legend()
-    plt.show()
+    # Iterate through the detections_df
+    for index, detection in detections_df.iterrows():
+        # Get the start time from the dataframe and convert it to UTCDateTime
+        start_time = UTCDateTime(detection['starttime'])
 
-##############################################################################
+        # Define the time window using the start time
+        start_window = start_time - window_size
+        end_window = start_time + window_size
+
+        # Extract the traces within the time window
+        windowed_traces = st.slice(starttime=start_window, endtime=end_window)
+
+        # Manually sum the traces within the time window
+        summed_trace = windowed_traces[0].copy()  # Initialize with the first trace
+        for trace in windowed_traces[1:]:
+            summed_trace.data += trace.data
+
+        # Append the summed trace to the list
+        summed_traces.append(summed_trace)
+
+    # Plot the summed traces
+    for index, summed_trace in enumerate(summed_traces):
+        # Create a new figure for each summed trace
+        plt.figure(figsize=(10, 6))
+
+        # Get the number of data points in the summed trace
+        num_points = len(summed_trace.data)
+
+        # Calculate the time values for the x-axis based on the sample rate
+        sample_rate = summed_trace.stats.sampling_rate
+        times = [(i - num_points // 2) / sample_rate for i in range(num_points)]
+
+        # Plot the summed trace with time on the x-axis and amplitude on the y-axis
+        plt.plot(times, summed_trace.data)
+
+        # Customize the plot
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.title(f'Summed Traces for Detection {index + 1}')
+
+        # Set x-axis limits and center the x-axis at 0
+        plt.xlim(-num_points // 2 / sample_rate, num_points // 2 / sample_rate)
+
+        # Save the plot as an image file
+        save_path = (f'C:/Users/papin/Desktop/phd/plots/'
+            f'sum_traces_net{network}_cha{channel_prefix}_det{index + 1}.png'
+        )
+        plt.savefig(save_path)
+
+        # Show the plot for this summed trace
+        plt.grid(True)
+        plt.close()
+
+################################## NOT USED ##################################
 
 def merge_csv_data(csv_file_paths, date_to_find, hour_of_interest=None):
     """
@@ -293,3 +352,105 @@ def plot_crosscorrelation(xcorrmean, thresh, mad, st, stream_duration,
         plt.gcf().subplots_adjust(bottom=0.2)
         plt.savefig(correlation_plot_filename)
         plt.close()
+
+def calculate_time_delays(templates_df, output_file_path):
+    # Load the templates DataFrame and reset the index
+    templates_df.reset_index(inplace=True)
+    
+    # Read the output file that contains information about detected events
+    detections_df = pd.read_csv(output_file_path)
+
+    # Initialize a list to store time delays
+    time_delays = []
+
+    # Iterate through the detected events
+    for _, detection in detections_df.iterrows():
+        # Find the corresponding template for the detected event
+        template = templates_df[templates_df['Index'] == detection['templ']].iloc[0]
+         
+        # Calculate the time delay by subtracting the template's primary event time
+        # from the time of the detected event
+        detected_event_time = UTCDateTime(detection['starttime'])
+        template_event_time = UTCDateTime(template['OT'])
+        time_delay = detected_event_time - template_event_time
+        
+        # Append the time delay to the list
+        time_delays.append(time_delay)
+
+    return time_delays
+
+def calculate_time_delays_and_arrival_times(templates_df, output_file_path, Vp, Vs):
+    # Load the templates DataFrame and reset the index
+    templates_df.reset_index(inplace=True)
+    
+    # Read the output file that contains information about detected events
+    detections_df = pd.read_csv(output_file_path)
+
+    # List to store the calculated time delays and arrival times
+    time_delays = []
+    arrival_times = []
+
+    for _, detection in detections_df.iterrows():
+        # Find the corresponding template for the detected event
+        template = templates_df[templates_df['Index'] == detection['templ']].iloc[0]
+
+        # Get the times of the template and the new event 
+        template_event_time = UTCDateTime(template['OT'])
+        detected_event_time = UTCDateTime(detection['starttime'])
+
+        # Retrieve the depth of the primary event from the template
+        D_primary = template['depth']
+
+        # Calculate the time delay by subtracting the template's primary event time
+        # from the time of the detected event
+        time_delay = detected_event_time - template_event_time
+
+        # Calculate the P-wave and S-wave arrival times 
+        p_wave_arrival = template_event_time + time_delay + (D_primary / Vp) ### WRONG
+        s_wave_arrival = template_event_time + time_delay + (D_primary / Vs) ### WRONG
+
+        # Append the calculated time delay and arrival times to their respective lists
+        time_delays.append(time_delay)
+        arrival_times.append((p_wave_arrival, s_wave_arrival))
+
+    return time_delays, arrival_times
+
+def append_to_file(filename, thresh_mad, max_xcorr):
+    """
+    Append threshold and maximum cross-correlation values to a text file.
+    """
+    with open(filename, "a", encoding='utf-8') as file:
+        file.write(f"{thresh_mad}\t{max_xcorr}\n")
+
+def plot_scatter_from_file(file_path):
+    """
+    Read data from a file and create a scatter plot.
+
+    Parameters:
+        file_path (str): The path to the file containing the data.
+
+    This function reads data from a file, assumes a specific format, and creates
+    a scatter plot based on the read data.
+    """
+    with open(file_path, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+        thresh_mad_values = []
+        max_xcorr_values = []
+        for line in lines[1:]:  # Skip the header line
+            parts = line.split('\t')
+            thresh_mad_values.append(float(parts[0]))
+            max_xcorr_values.append(float(parts[1]))
+
+    x_values = range(1, len(thresh_mad_values) + 1)
+    plt.scatter(x_values, thresh_mad_values, c='blue', label='Thresh * Mad')
+    plt.scatter(x_values, max_xcorr_values, c='red', label='Max Xcorr')
+    # plt.xticks(range(1, len(x_values) + 1))
+    plt.yticks([i * 0.1 for i in range(6)] + [1])
+    max_y = math.ceil(max(max(thresh_mad_values), max(max_xcorr_values)) / 0.1) * 0.1 + 0.1
+    plt.ylim(0, max_y)
+    plt.grid(axis='x')
+    plt.grid(axis='y', linestyle='--', linewidth=0.5)
+    plt.xlabel('Number')
+    plt.ylabel('Values of Correlation')
+    plt.legend()
+    plt.show()

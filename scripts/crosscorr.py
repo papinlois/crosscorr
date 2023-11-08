@@ -41,20 +41,10 @@ startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
 # Call the function to plot all the data 
-# crosscorr_tools.plot_data(date_of_interest, stas, channels, network)
+crosscorr_tools.plot_data(date_of_interest, stas, channels, network)
 
-def get_traces(stas, channels): # Use less of memory with the yield
-    for cha in channels:
-        for sta in stas:
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
-            try:
-                tr = read(file)[0]
-                # print("Loaded data:", tr)
-                yield tr
-            except FileNotFoundError:
-                print(f"File {file} not found.")
-st = Stream(traces=get_traces(stas, channels))
+# Get the streams
+st = Stream(traces=crosscorr_tools.get_traces(stas, channels, date_of_interest))
 
 # Preprocessing: Interpolation, trimming, detrending, and filtering
 start = max(tr.stats.starttime for tr in st)
@@ -88,7 +78,7 @@ del df_full # too big to keep and useless
 info_lines = []  # Store lines of information
 
 # Split the templates into groups of 20
-template_groups = [templates[i:i + 20] for i in range(3, len(templates), 20)]
+template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
 
 # Process templates in batches of 20
 for batch_idx, template_group in enumerate(template_groups):
@@ -209,3 +199,11 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("No significant Correlations:\n")
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
+
+
+# Define the time window size in seconds (e.g., 30 seconds)
+window_size = 5*60*2
+
+# Plot and save all summed traces on the new detected events time
+crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest)
+
