@@ -143,11 +143,112 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
         channels (list): List of channel names.
         window_size (int): Time window size in seconds.
         network (str): Network identifier.
-        channel_prefix (str): Channel prefix.
         date_of_interest (str): Date of interest in 'YYYYMMDD' format.
     """
     # Get the data (so it can be called outside of crosscorr.py)
     st = Stream(traces=get_traces(stas, channels, date_of_interest))
+    channel_prefix = channels[0][:2]
+    
+    # Preprocessing: Interpolation, trimming, detrending, and filtering
+    start = max(tr.stats.starttime for tr in st)
+    end = min(tr.stats.endtime for tr in st)
+    for tr in st:
+        tr.trim(starttime=start, endtime=end, fill_value=0)
+        tr.interpolate(sampling_rate=80, starttime=start)
+        tr.detrend(type='simple')
+        tr.filter("bandpass", freqmin=1.0, freqmax=10.0)
+
+    # Define the path to the detections file based on the provided date_of_interest
+    output_file_path = f"C:/Users/papin/Desktop/phd/plots/{network} {channel_prefix} {date_of_interest}/output.txt"
+
+    # Read the output file that contains information about detected events
+    detections_df = pd.read_csv(output_file_path)
+
+    # Create a list to store the summed traces
+    summed_traces = []
+
+    # Iterate through the detections_df
+    for index, detection in detections_df.iterrows():
+        
+        # if index==244:
+        # Get the start time from the dataframe and convert it to UTCDateTime
+        start_time = UTCDateTime(detection['starttime'])
+
+        # Define the time window using the start time
+        start_window = start_time - window_size
+        end_window = start_time + window_size
+
+        # Extract the traces within the time window
+        windowed_traces = st.slice(starttime=start_window, endtime=end_window)
+
+        # Manually sum the traces within the time window
+        summed_trace = windowed_traces[0].copy()  # Initialize with the first trace
+        for trace in windowed_traces[1:]:
+            summed_trace.data += trace.data
+
+        # Append the summed trace to the list
+        summed_traces.append(summed_trace)
+
+    # Plot the summed traces
+    for index, summed_trace in enumerate(summed_traces):
+        # Create a new figure for each summed trace
+        plt.figure(figsize=(10, 6))
+
+        # Get the number of data points in the summed trace
+        num_points = len(summed_trace.data)
+
+        # Calculate the time values for the x-axis based on the sample rate
+        sample_rate = summed_trace.stats.sampling_rate
+        times = [(i - num_points // 2) / sample_rate for i in range(num_points)]
+
+        # Plot the summed trace with time on the x-axis and amplitude on the y-axis
+        plt.plot(times, summed_trace.data)
+
+        # Customize the plot
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.title(f'Summed Traces for Detection {index + 1}')
+
+        # Set x-axis limits and center the x-axis at 0
+        plt.xlim(-num_points // 2 / sample_rate, num_points // 2 / sample_rate)
+
+        # Save the plot as an image file
+        save_path = (f'C:/Users/papin/Desktop/phd/plots/'
+            f'sum_traces_net{network}_cha{channel_prefix}_det{index + 1}.png'
+        )
+        plt.savefig(save_path)
+
+        # Show the plot for this summed trace
+        plt.grid(True)
+        plt.close()
+
+def get_traces_PB(stas, channels, startdate, network):
+    for sta in stas:
+        day_of_year = startdate.timetuple().tm_yday
+        year = startdate.timetuple().tm_year
+        path = "C:/Users/papin/Desktop/phd/data/seed"
+        file = f"{path}/{sta}.{network}.{year}.{day_of_year}"
+        try:
+            for cha in range(len(channels)):
+                tr = read(file)[cha]
+                yield tr
+        except FileNotFoundError:
+            print(f"File {file} not found.")
+            
+def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest):
+    """
+    Preprocess seismic data and plot summed traces around detected events.
+
+    Args:
+        stas (list): List of station names.
+        channels (list): List of channel names.
+        window_size (int): Time window size in seconds.
+        network (str): Network identifier.
+        startdate (datetime): Date of interest in datetime format.
+        date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+    """
+    # Get the data (so it can be called outside of crosscorr.py)
+    st = Stream(traces=get_traces_PB(stas, channels, startdate, network))
     channel_prefix = channels[0][:2]
     
     # Preprocessing: Interpolation, trimming, detrending, and filtering

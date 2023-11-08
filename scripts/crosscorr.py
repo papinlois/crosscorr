@@ -14,22 +14,22 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
-from obspy.core import Stream, read
+from obspy.core import Stream
 import autocorr_tools
 import crosscorr_tools
 
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
 locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
-# crosscorr_tools.plot_station_locations(locs)
+crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
 startscript = time.time()
 
 # List of stations/channels to analyze
 # CN network
-# stas = ['PFB', 'YOUB'] 
-# channels = ['HHN', 'HHE', 'HHZ']
+stas = ['PFB', 'YOUB'] 
+channels = ['HHN', 'HHE', 'HHZ']
 stas = ['LZB','SNB','NLLB','PGC'] 
 channels = ['BHN','BHE','BHZ']
 channel_prefix = channels[0][:2]
@@ -66,8 +66,8 @@ df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
 df_full=df_full[(df_full['residual']<0.5)] # & (df_full['N']>3)]
 df_full['datetime']=pd.to_datetime(df_full['OT'])
 templates = df_full[(df_full['datetime'] >= start.datetime) 
-                   & (df_full['datetime'] < end.datetime) 
-                   & (df_full['residual'] < 0.1)]
+                    & (df_full['datetime'] < end.datetime) 
+                    & (df_full['residual'] < 0.1)]
 templates = templates.drop(columns=['dates', 'N'])
 # Add a new column for the index of the lines (for output file)
 templates.reset_index(inplace=True, drop=True)
@@ -78,7 +78,7 @@ del df_full # too big to keep and useless
 info_lines = []  # Store lines of information
 
 # Split the templates into groups of 20
-template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
+template_groups = [templates[i:i + 20] for i in range(68, len(templates), 20)]
 
 # Process templates in batches of 20
 for batch_idx, template_group in enumerate(template_groups):
@@ -173,7 +173,6 @@ for batch_idx, template_group in enumerate(template_groups):
                 else:
                     del xcorrmean
                 
-                
         # Follow the advancement
         print(f"Processed batch {batch_idx + 1}/{len(template_groups)}")
 
@@ -200,10 +199,8 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
 
-
-# Define the time window size in seconds (e.g., 30 seconds)
-window_size = 5*60*2
+# Define the time window size in seconds 
+window_size = 0.5
 
 # Plot and save all summed traces on the new detected events time
 crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest)
-

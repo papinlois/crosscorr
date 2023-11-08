@@ -14,14 +14,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
-from obspy.core import Stream, read
+from obspy.core import Stream
 import autocorr_tools
 import crosscorr_tools
 
 # Plot station locations
 locfile = pd.read_csv('stations.csv')
 locs = locfile[['Name', 'Longitude', 'Latitude', 'Network']].values
-# crosscorr_tools.plot_station_locations(locs)
+crosscorr_tools.plot_station_locations(locs)
 
 # Start timer
 startscript = time.time()
@@ -40,24 +40,12 @@ enddate = startdate + timedelta(days=1)
 # Call the function to plot all the data 
 crosscorr_tools.plot_data(date_of_interest, stas, channels, network)
 
-def get_traces(stas, channels):
-    for sta in stas:
-        day_of_year = startdate.timetuple().tm_yday
-        year = startdate.timetuple().tm_year
-        path = "C:/Users/papin/Desktop/phd/data/seed"
-        file = f"{path}/{sta}.{network}.{year}.{day_of_year}"
-        try:
-            for cha in range(len(channels)):
-                tr = read(file)[cha]
-                yield tr
-        except FileNotFoundError:
-            print(f"File {file} not found.")
-st = Stream(traces=get_traces(stas, channels))
+# Get the streams
+st = Stream(traces=crosscorr_tools.get_traces_PB(stas, channels, startdate, network))
 
 # Preprocessing: Interpolation, trimming, detrending, and filtering
 start = max(tr.stats.starttime for tr in st)
 end = min(tr.stats.endtime for tr in st)
-
 for tr in st:
     tr.trim(starttime=start, endtime=end, fill_value=0)
     tr.interpolate(sampling_rate=80, starttime=start)
@@ -87,12 +75,14 @@ del df_full
 info_lines = []
 
 # Split the templates into groups of 20
-template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
+template_groups = [templates[i:i + 20] for i in range(67, len(templates), 20)]
 
 # Process templates in batches of 20
 for batch_idx, template_group in enumerate(template_groups):
     try:
+        # Iterate over all templates
         for idx, template_stats in template_group.iterrows():
+            # Iterate over all stations and channels
             xcorr_templates = []
             for tr1 in st:
                 template_stats = templates.iloc[idx]
@@ -111,13 +101,16 @@ for batch_idx, template_group in enumerate(template_groups):
             
             del xcorr_template, xcorr_templates, xcorrfull
             
+            # Find indices where the cross-correlation values are above the threshold
             mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
             thresh = 8
             aboves = np.where(xcorrmean > thresh * mad)
-    
+            
+            # Construct a filename
             template_index = idx
             crosscorr_combination = f'net{network}_cha{channel_prefix}_templ{template_index}'
-            
+           
+            # Calculate the duration of the data in seconds for the plot
             stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
 
             if aboves[0].size == 0:
@@ -129,10 +122,15 @@ for batch_idx, template_group in enumerate(template_groups):
                     f'crosscorr_{crosscorr_combination}_{date_of_interest}.png'
                 )
                 
+                # Calculate the window length for clustering
                 windowlen = template.stats.npts
+                # Find indices where the cross-correlation values are above the threshold
                 inds = np.where(xcorrmean > thresh * mad)[0]
+                # Cluster the detected events
                 clusters = autocorr_tools.clusterdects(inds, windowlen)
+                # Cull detections within clusters
                 newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
+                # Find the index of the maximum value in newdect
                 max_index = np.argmax(xcorrmean[newdect])
     
                 if newdect.size > 1: 
@@ -153,14 +151,21 @@ for batch_idx, template_group in enumerate(template_groups):
                     plt.close()
                     del xcorrmean, t, fig, ax
                     
-                    newevent = np.delete(newdect, max_index) * st[0].stats.delta
+                    # Create UTCDateTime objects from the newevent values
+                    newevent = np.delete(newdect, max_index)*st[0].stats.delta
                     utc_times = [start.datetime + timedelta(seconds=event) for event in newevent]
+                    
+                    # Save the cross-correlation values for each newevent
+                    mask = xcorrmean[newdect] != (xcorrmean[newdect])[max_index]
+                    cc_values = xcorrmean[newdect][mask]
+ 
+                    # Write the newevent and additional columns to the output file
                     with open("output.txt", "a") as output_file:
                         if os.stat("output.txt").st_size == 0:
-                            output_file.write("starttime,templ,channel,network\n")
-                        for utc_time in utc_times:
-                            output_file.write(f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
-                                              f"{idx},{channel_prefix},{network}\n")
+                            output_file.write("starttime,templ,channel,network,crosscorr value\n")
+                        for i in range(len(utc_times)):
+                            output_file.write(f"{UTCDateTime(utc_times[i]).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
+                                              f"{idx},{channel_prefix},{network},{cc_values[i]:.4f}\n")
                 else:
                     del xcorrmean
                 
@@ -190,3 +195,9 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("No significant Correlations:\n")
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
+
+# Define the time window size in seconds (e.g., 5 minutes)
+window_size = 5*60*2
+
+# Plot and save all summed traces on the new detected events time
+crosscorr_tools.plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest)
