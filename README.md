@@ -2,6 +2,13 @@
 
 This repository contains Python scripts for analyzing and detecting seismic events in seismic station data using network cross-correlation techniques. The scripts are designed to process and analyze seismic data from multiple stations, perform cross-correlation, and detect significant correlations, which may indicate seismic events. The detected events are then clustered and summarized for further analysis.
 
+## Table of Contents
+- [Getting Started](#getting-started)
+- [Repository Overview](#repository-overview)
+- [Script Overview](#script-overview)
+- [Output](#output)
+- [Author](#author)
+
 ## Getting Started
 
 To use this seismic data analysis and detection script, follow these steps:
@@ -107,6 +114,8 @@ The `info.txt` file serves as a summary and information log for the seismic data
 - Stations and Channel Used: Lists the stations and channels selected for analysis.
 
 - Templates: Provides information about the loaded seismic templates, including their datetime, latitude, longitude, and residual values.
+
+- No significant Correlations: Lists any seismic events or correlations that were detected but did not meet the significance threshold.
 
 - Script execution time: Records the total time taken to execute the script.
 
