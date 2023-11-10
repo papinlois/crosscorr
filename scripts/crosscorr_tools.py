@@ -5,6 +5,7 @@ Created on Mon Oct 16 14:48:37 2023
 @author: papin
 """
 
+import os
 import numpy as np
 import pandas as pd
 import math
@@ -15,34 +16,57 @@ from obspy import UTCDateTime
 from obspy.core import Stream, read
 from datetime import datetime
 
-def plot_station_locations(locs):
+def get_traces(stas, channels, date_of_interest, base_dir): # Use less of memory with the yield
+    for cha in channels:
+        for sta in stas:
+            path = os.path.join(base_dir, 'data', 'seed')
+            file = os.path.join(path, f"{date_of_interest}.CN.{sta}..{cha}.mseed")
+            try:
+                tr = read(file)[0]
+                # print("Loaded data:", tr)
+                yield tr
+            except FileNotFoundError:
+                print(f"File {file} not found.")
+
+def process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0):
     """
-    Create a plot of station locations on a map.
+    Preprocess seismic data.
 
     Parameters:
-        locs (list of tuples): A list of tuples, where each tuple contains
-        station name, longitude, and latitude.
-
-    This function creates a scatter plot of station locations and labels them
-    with station names. The resulting plot is saved as 'station_locations.png'.
+        st (obspy.core.Stream): Seismic data stream.
+        stas (list): List of station names.
+        locs (numpy.ndarray, optional): Array containing station locations.
+        sampling_rate (float): Sampling rate for interpolation.
+        freqmin (float): Minimum frequency for bandpass filtering.
+        freqmax (float): Maximum frequency for bandpass filtering.
 
     Returns:
         None
     """
-    plt.figure()
-    
-    # Separate stations by network and plot them in different colors
-    for name, lon, lat, network in locs:
-        if network == 'CN':
-            plt.plot(lon, lat, 'bo')
-        elif network == 'PB':
-            plt.plot(lon, lat, 'ro')
-        plt.text(lon, lat, name)
-        
-    plt.savefig('C:/Users/papin/Desktop/phd/plots/station_locations.png')
-    plt.close()
+    # Filter out traces that don't have the required number of data points
+    st = Stream(traces=[tr for tr in st if tr.stats.npts * tr.stats.delta == 86400])
 
-def plot_data(date_of_interest, stas, channels, network):
+    if not st:
+        print("No traces have the required number of data points. Exiting process_data.")
+        return
+
+    # Preprocessing: Interpolation, trimming, detrending, and filtering
+    for tr in st:
+        tr.trim(starttime=tr.stats.starttime, endtime=tr.stats.endtime, fill_value=0)
+        tr.interpolate(sampling_rate=sampling_rate, starttime=tr.stats.starttime)
+        tr.detrend(type='simple')
+        tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
+
+    # Add locations if locs is provided
+    if locs is not None:
+        for sta_idx, sta in enumerate(stas):
+            ind = np.where(locs[:, 0] == sta)
+            st[sta_idx].stats.y = locs[ind, 1][0][0]
+            st[sta_idx].stats.x = locs[ind, 2][0][0]
+        
+    return st
+
+def plot_data(date_of_interest, stas, channels, network, base_dir):
     """
     Plot seismic station data for a specific date.
 
@@ -52,7 +76,8 @@ def plot_data(date_of_interest, stas, channels, network):
         stas (list of str): List of station names.
         channels (list of str): List of channel names.
         network (str): Network code ('CN' or 'PB').
-
+        base_dir (str): The base directory for file paths.
+        
     This function loads seismic data from the specified stations and channels 
     for the given date, preprocesses the data, and plots the normalized traces
     with an offset for visualization.
@@ -67,8 +92,8 @@ def plot_data(date_of_interest, stas, channels, network):
         # Load seismic data for the specified stations and channels (CN network)
         for sta in stas:
             for cha in channels:
-                path = "C:/Users/papin/Desktop/phd/data/seed"
-                file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
+                path = os.path.join(base_dir, 'data', 'seed')
+                file = os.path.join(path, f"{date_of_interest}.CN.{sta}..{cha}.mseed")
                 try:
                     tr = read(file)[0]
                     st += tr
@@ -80,8 +105,8 @@ def plot_data(date_of_interest, stas, channels, network):
             startdate = datetime.strptime(date_of_interest, "%Y%m%d")
             day_of_year = startdate.timetuple().tm_yday
             year = startdate.timetuple().tm_year
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{sta}.{network}.{year}.{day_of_year}"
+            path = os.path.join(base_dir, 'data', 'seed')
+            file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
             try:
                 for cha in range(len(channels)):
                     tr = read(file)[cha]
@@ -89,12 +114,8 @@ def plot_data(date_of_interest, stas, channels, network):
             except FileNotFoundError:
                 print(f"File {file} not found.")
     
-    # Preprocessing: Interpolation, trimming, detrending, and filtering
-    start = max(tr.stats.starttime for tr in st)
-    st.interpolate(sampling_rate=80, starttime=start) # Can be modified
-    st.detrend(type='simple')
-    st.filter("bandpass", freqmin=1.0, freqmax=10.0) # Can be modified
-    
+    st = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+   
     plt.figure(figsize=(15, 5))
     nb = 10 # Distance between plots
     offset = len(stas) * len(channels) * nb
@@ -119,22 +140,10 @@ def plot_data(date_of_interest, stas, channels, network):
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
     plt.grid(True)
     plt.ylim(0, len(stas) * len(channels) * nb + 10)
-    plt.savefig(f'C:/Users/papin/Desktop/phd/plots/data_plot_{start_date}.png')
+    plt.savefig(os.path.join(base_dir, 'plots', f'data_plot_{start_date}.png'))
     plt.close()
 
-def get_traces(stas, channels, date_of_interest): # Use less of memory with the yield
-    for cha in channels:
-        for sta in stas:
-            path = "C:/Users/papin/Desktop/phd/data/seed"
-            file = f"{path}/{date_of_interest}.CN.{sta}..{cha}.mseed"
-            try:
-                tr = read(file)[0]
-                # print("Loaded data:", tr)
-                yield tr
-            except FileNotFoundError:
-                print(f"File {file} not found.")
-
-def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
+def plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir):
     """
     Preprocess seismic data and plot summed traces around detected events.
 
@@ -144,24 +153,17 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
         window_size (int): Time window size in seconds.
         network (str): Network identifier.
         date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+        base_dir (str): The base directory for file paths.
     """
     # Get the data (so it can be called outside of crosscorr.py)
-    st = Stream(traces=get_traces(stas, channels, date_of_interest))
+    st = Stream(traces=get_traces(stas, channels, date_of_interest, base_dir))
     channel_prefix = channels[0][:2]
     
-    # Preprocessing: Interpolation, trimming, detrending, and filtering
-    start = max(tr.stats.starttime for tr in st)
-    end = min(tr.stats.endtime for tr in st)
-    for tr in st:
-        tr.trim(starttime=start, endtime=end, fill_value=0)
-        tr.interpolate(sampling_rate=80, starttime=start)
-        tr.detrend(type='simple')
-        tr.filter("bandpass", freqmin=1.0, freqmax=10.0)
+    st = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+
 
     # Define the path to the detections file based on the provided date_of_interest
-    output_file_path = f"C:/Users/papin/Desktop/phd/plots/{network} {channel_prefix} {date_of_interest}/output.txt"
-
-    # Read the output file that contains information about detected events
+    output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
     detections_df = pd.read_csv(output_file_path)
 
     # Create a list to store the summed traces
@@ -175,7 +177,7 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
         start_time = UTCDateTime(detection['starttime'])
 
         # Define the time window using the start time
-        start_window = start_time - window_size
+        start_window = start_time
         end_window = start_time + window_size
 
         # Extract the traces within the time window
@@ -193,49 +195,75 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest):
     for index, summed_trace in enumerate(summed_traces):
         # Create a new figure for each summed trace
         plt.figure(figsize=(10, 6))
-
-        # Get the number of data points in the summed trace
-        num_points = len(summed_trace.data)
-
+        
         # Calculate the time values for the x-axis based on the sample rate
-        sample_rate = summed_trace.stats.sampling_rate
-        times = [(i - num_points // 2) / sample_rate for i in range(num_points)]
-
+        num_points = len(summed_trace.data)
+        times = np.linspace(0, window_size, num_points, endpoint=False)
+        
         # Plot the summed trace with time on the x-axis and amplitude on the y-axis
-        plt.plot(times, summed_trace.data)
+        plt.plot(times,summed_trace.data)
 
         # Customize the plot
         plt.xlabel('Time (s)')
         plt.ylabel('Amplitude')
-        plt.title(f'Summed Traces for Detection {index + 1}')
-
-        # Set x-axis limits and center the x-axis at 0
-        plt.xlim(-num_points // 2 / sample_rate, num_points // 2 / sample_rate)
+        plt.title(f'Stacks net{network}_cha{channel_prefix}_det{index + 1}_{date_of_interest}')        
+     
+        # Set x-axis limits
+        plt.xlim(0, window_size)
+    
+        plt.grid(True)
 
         # Save the plot as an image file
-        save_path = (f'C:/Users/papin/Desktop/phd/plots/'
-            f'sum_traces_net{network}_cha{channel_prefix}_det{index + 1}.png'
-        )
+        save_path = os.path.join(base_dir, 'plots',
+                                 f'stacks_net{network}_cha{channel_prefix}_det{index + 1}_{date_of_interest}.png')
         plt.savefig(save_path)
 
-        # Show the plot for this summed trace
-        plt.grid(True)
         plt.close()
 
-def get_traces_PB(stas, channels, startdate, network):
+def plot_station_locations(locs, base_dir):
+    """
+    Create a plot of station locations on a map.
+
+    Parameters:
+        locs (list of tuples): A list of tuples, where each tuple contains
+        station name, longitude, and latitude.
+        base_dir (str): The base directory for file paths.
+
+    This function creates a scatter plot of station locations and labels them
+    with station names. The resulting plot is saved as 'station_locations.png'.
+
+    Returns:
+        None
+    """
+    plt.figure()
+    
+    # Separate stations by network and plot them in different colors
+    for name, lon, lat, network in locs:
+        if network == 'CN':
+            plt.plot(lon, lat, 'bo')
+        elif network == 'PB':
+            plt.plot(lon, lat, 'ro')
+        plt.text(lon, lat, name)
+        
+    plt.savefig(os.path.join(base_dir, 'plots', 'station_locations.png'))
+    plt.close()
+
+#####
+
+def get_traces_PB(stas, channels, startdate, network, base_dir):
     for sta in stas:
         day_of_year = startdate.timetuple().tm_yday
         year = startdate.timetuple().tm_year
-        path = "C:/Users/papin/Desktop/phd/data/seed"
-        file = f"{path}/{sta}.{network}.{year}.{day_of_year}"
+        path = os.path.join(base_dir, 'data', 'seed')
+        file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
         try:
             for cha in range(len(channels)):
                 tr = read(file)[cha]
                 yield tr
         except FileNotFoundError:
             print(f"File {file} not found.")
-            
-def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest):
+   
+def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir):
     """
     Preprocess seismic data and plot summed traces around detected events.
 
@@ -246,9 +274,10 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
         network (str): Network identifier.
         startdate (datetime): Date of interest in datetime format.
         date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+        base_dir (str): The base directory for file paths.
     """
     # Get the data (so it can be called outside of crosscorr.py)
-    st = Stream(traces=get_traces_PB(stas, channels, startdate, network))
+    st = Stream(traces=get_traces_PB(stas, channels, startdate, network, base_dir))
     channel_prefix = channels[0][:2]
     
     # Preprocessing: Interpolation, trimming, detrending, and filtering
@@ -261,7 +290,7 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
         tr.filter("bandpass", freqmin=1.0, freqmax=10.0)
 
     # Define the path to the detections file based on the provided date_of_interest
-    output_file_path = f"C:/Users/papin/Desktop/phd/plots/{network} {channel_prefix} {date_of_interest}/output.txt"
+    output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
 
     # Read the output file that contains information about detected events
     detections_df = pd.read_csv(output_file_path)
@@ -307,19 +336,18 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
         # Customize the plot
         plt.xlabel('Time (s)')
         plt.ylabel('Amplitude')
-        plt.title(f'Summed Traces for Detection {index + 1}')
+        plt.title(f'Stacks net{network}_cha{channel_prefix}_det{index + 1}_{date_of_interest}')
 
         # Set x-axis limits and center the x-axis at 0
         plt.xlim(-num_points // 2 / sample_rate, num_points // 2 / sample_rate)
 
+        plt.grid(True)
+
         # Save the plot as an image file
-        save_path = (f'C:/Users/papin/Desktop/phd/plots/'
-            f'sum_traces_net{network}_cha{channel_prefix}_det{index + 1}.png'
-        )
+        save_path = os.path.join(base_dir, 'plots',
+                                 f'stacks_net{network}_cha{channel_prefix}_det{index + 1}_{date_of_interest}.png')
         plt.savefig(save_path)
 
-        # Show the plot for this summed trace
-        plt.grid(True)
         plt.close()
 
 ################################## NOT USED ##################################

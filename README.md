@@ -122,3 +122,5 @@ The `info.txt` file serves as a summary and information log for the seismic data
 ## Author
 
 This script was crafted by [papin](https://github.com/papin), and it is made available as an open-source tool to advance seismic data analysis. Feel free to adapt and enhance the script to meet your specific research needs. If you encounter questions or require assistance, please don't hesitate to reach out to the author through their GitHub profile for guidance and support.
+
+As of 11/10/2023.
