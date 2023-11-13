@@ -2,6 +2,19 @@
 """
 Created on Mon Oct 16 14:48:37 2023
 
+This module provides functions for seismic data processing, visualization, and analysis.
+The functions cover loading and preprocessing data, plotting seismic traces, creating
+summed traces around detected events, and more.
+
+Functions:
+- get_traces: Load seismic data from specified stations and channels for a given date.
+- process_data: Preprocess seismic data, including interpolation, trimming, detrending, and filtering.
+- plot_data: Plot seismic station data for a specific date, including normalized traces with an offset.
+- plot_summed_traces: Preprocess seismic data and plot summed traces around detected events.
+- plot_station_locations: Create a plot of station locations on a map.
+- get_traces_PB: Load seismic data from the PB network for specified stations, channels, and date.
+- plot_summed_traces_PB: Preprocess PB network seismic data and plot summed traces around detected events.
+
 @author: papin
 """
 
@@ -248,7 +261,7 @@ def plot_station_locations(locs, base_dir):
     plt.savefig(os.path.join(base_dir, 'plots', 'station_locations.png'))
     plt.close()
 
-#####
+##### to modify before using the crosscorr_PB.py
 
 def get_traces_PB(stas, channels, startdate, network, base_dir):
     for sta in stas:

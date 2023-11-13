@@ -2,7 +2,21 @@
 """
 Created on Tue Oct  3 15:56:50 2023
 
-Functions are from autocorrelation and crosscorrelation tools
+This script performs cross-correlation analysis on seismic data to detect and analyze events.
+Functions are from autocorrelation and cross-correlation tools.
+
+Description:
+1. Loads seismic data from specified stations and channels for a given date.
+2. Preprocesses the data by trimming, interpolating, detrending, and filtering.
+3. Plots the full stream of seismic data with corresponding x-axis limits.
+4. Defines templates for cross-correlation analysis.
+5. Computes cross-correlation coefficients between each station's data and the template.
+6. Detects significant correlations based on a specified threshold.
+7. Generates and saves plots for cross-correlation analysis with detected events.
+8. Outputs information about significant correlations to a text file.
+9. Creates an info.txt file with relevant information about the analysis.
+
+Note: Make sure to adjust the input parameters such as station names, channels, date_of_interest, etc.
 
 @author: papin
 """
@@ -184,8 +198,6 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
 
-# Define the time window size in seconds
-window_size = 30
-
 # Plot and save all summed traces on the new detected events time
+window_size = 30
 crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir)
