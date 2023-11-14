@@ -54,7 +54,8 @@ def process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.
         freqmax (float): Maximum frequency for bandpass filtering.
 
     Returns:
-        None
+        st (obspy.core.Stream): Seismic data stream.
+        stas (list): List of station names.
     """
     # Filter out traces that don't have the required number of data points
     st = Stream(traces=[tr for tr in st if tr.stats.npts * tr.stats.delta == 86400])
@@ -69,15 +70,19 @@ def process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.
         tr.interpolate(sampling_rate=sampling_rate, starttime=tr.stats.starttime)
         tr.detrend(type='simple')
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
-
+    
+    # Filter stas based on available traces
+    stas_with_data = [tr.stats.station for tr in st]
+    stas = [sta for sta in stas if sta in stas_with_data]
+    
     # Add locations if locs is provided
     if locs is not None:
         for sta_idx, sta in enumerate(stas):
             ind = np.where(locs[:, 0] == sta)
             st[sta_idx].stats.y = locs[ind, 1][0][0]
             st[sta_idx].stats.x = locs[ind, 2][0][0]
-        
-    return st
+    
+    return st, stas
 
 def plot_data(date_of_interest, stas, channels, network, base_dir):
     """
@@ -91,10 +96,6 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
         network (str): Network code ('CN' or 'PB').
         base_dir (str): The base directory for file paths.
         
-    This function loads seismic data from the specified stations and channels 
-    for the given date, preprocesses the data, and plots the normalized traces
-    with an offset for visualization.
-
     Returns:
         None
     """
@@ -127,7 +128,7 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
             except FileNotFoundError:
                 print(f"File {file} not found.")
     
-    st = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
    
     plt.figure(figsize=(15, 5))
     nb = 10 # Distance between plots
@@ -160,20 +161,22 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
     """
     Preprocess seismic data and plot summed traces around detected events.
 
-    Args:
+    Parameters:
         stas (list): List of station names.
         channels (list): List of channel names.
         window_size (int): Time window size in seconds.
         network (str): Network identifier.
         date_of_interest (str): Date of interest in 'YYYYMMDD' format.
         base_dir (str): The base directory for file paths.
+        
+    Returns:
+        None
     """
     # Get the data (so it can be called outside of crosscorr.py)
     st = Stream(traces=get_traces(stas, channels, date_of_interest, base_dir))
     channel_prefix = channels[0][:2]
     
-    st = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
-
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
 
     # Define the path to the detections file based on the provided date_of_interest
     output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
@@ -260,6 +263,109 @@ def plot_station_locations(locs, base_dir):
         
     plt.savefig(os.path.join(base_dir, 'plots', 'station_locations.png'))
     plt.close()
+
+def plot_summed_traces_comparison(stas, channels, network, date_of_interest, base_dir, templates):
+    """
+    Preprocess seismic data and plot summed traces around detected events along with corresponding template.
+
+    Parameters:
+        stas (list): List of station names.
+        channels (list): List of channel names.
+        network (str): Network identifier.
+        date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+        base_dir (str): The base directory for file paths.
+        templates (pd.DataFrame): DataFrame containing template information.
+        
+    This function processes seismic data, extracts traces around detected events, and plots the summed traces for both
+    the detection window and the corresponding template window on the same plot for visual comparison.
+
+    Returns:
+        None
+    """
+    # Get the data (so it can be called outside of crosscorr.py)
+    st = Stream(traces=get_traces(stas, channels, date_of_interest, base_dir))
+    channel_prefix = channels[0][:2]
+
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+
+    # Define the path to the detections file based on the provided date_of_interest
+    output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
+    detections_df = pd.read_csv(output_file_path)
+
+    # Create a list to store the summed traces
+    summed_traces_detection = []
+    summed_traces_template = []
+
+    for index, detection in detections_df.iterrows():
+        # Get the template index for the current detection
+        template_index = int(detection['templ'])
+
+        # Retrieve the corresponding template information from templates
+        template_info = templates.iloc[template_index]
+
+        # Get the template times
+        template_start_time = UTCDateTime(template_info['datetime'])
+        window_size = 30  # Assuming a fixed window size of 30 seconds
+        start_window_template = template_start_time
+        end_window_template = template_start_time + window_size
+        windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
+
+        # Manually sum the traces within the template time window
+        summed_trace_template = windowed_traces_template[0].copy()  # Initialize with the first trace
+        for trace_template in windowed_traces_template[1:]:
+            summed_trace_template.data += trace_template.data
+
+        # Get the detection times
+        start_time_detection = UTCDateTime(detection['starttime'])
+        start_window_detection = start_time_detection
+        end_window_detection = start_time_detection + window_size
+        windowed_traces_detection = st.slice(starttime=start_window_detection, endtime=end_window_detection)
+
+        # Manually sum the traces within the detection time window
+        summed_trace_detection = windowed_traces_detection[0].copy()  # Initialize with the first trace
+        for trace_detection in windowed_traces_detection[1:]:
+            summed_trace_detection.data += trace_detection.data
+
+        # Append the summed traces to the lists
+        summed_traces_template.append(summed_trace_template)
+        summed_traces_detection.append(summed_trace_detection)
+
+        # Create a new figure for each comparison
+        fig, axs = plt.subplots(3, 1, figsize=(12, 12), sharex=True)
+
+        # Calculate the time values for the x-axis based on the sample rate
+        num_points_template = len(summed_trace_template.data)
+        times_template = np.linspace(0, window_size, num_points_template, endpoint=False)
+
+        num_points_detection = len(summed_trace_detection.data)
+        times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
+
+        # Plot the summed traces with time on the x-axis and amplitude on the y-axis
+        axs[0].plot(times_detection, summed_trace_detection.data, label='Detection Window', linestyle='-', color='C0')
+        axs[0].set_ylabel('Amplitude')
+        axs[0].legend()
+        axs[0].grid(True)
+        axs[1].plot(times_template, summed_trace_template.data, label=f'Template Window {template_index}', linestyle='--', color='C1')
+        axs[1].set_ylabel('Amplitude')
+        axs[1].legend()
+        axs[1].grid(True)
+
+        # Add a third subplot superimposing the two plots
+        axs[2].plot(times_detection, summed_trace_detection.data, label='Detection Window', linestyle='-', color='C0')
+        axs[2].plot(times_template, summed_trace_template.data, label=f'Template Window {template_index + 1}', linestyle='--', color='C1')
+        axs[2].set_xlabel('Time (s)')
+        axs[2].set_ylabel('Amplitude')
+        axs[2].grid(True)
+
+        # Add this line to ensure proper layout
+        plt.tight_layout()
+
+        # Save the plot as an image file
+        save_path = os.path.join(base_dir, 'plots',
+                                 f'templvsstacks_net{network}_cha{channel_prefix}_det{index + 1}_{date_of_interest}.png')
+        plt.savefig(save_path)
+        plt.close()
+    
 
 ##### to modify before using the crosscorr_PB.py
 

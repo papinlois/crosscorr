@@ -47,7 +47,7 @@ startscript = time.time()
 # CN network
 # stas = ['PFB', 'YOUB'] 
 # channels = ['HHN', 'HHE', 'HHZ']
-stas = ['LZB','SNB','NLLB','PGC'] 
+stas = ['LZB','SNB','PGC','NLLB'] 
 channels = ['BHN','BHE','BHZ']
 channel_prefix = channels[0][:2]
 network = 'CN'
@@ -62,7 +62,7 @@ crosscorr_tools.plot_data(date_of_interest, stas, channels, network, base_dir)
 
 # Get the streams and preprocess
 st = Stream(traces=crosscorr_tools.get_traces(stas, channels, date_of_interest, base_dir))
-st = crosscorr_tools.process_data(st, stas, locs, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+st, stas = crosscorr_tools.process_data(st, stas, locs, sampling_rate=80, freqmin=1.0, freqmax=10.0)
 
 # Load LFE data on Tim's catalog
 df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -79,10 +79,10 @@ del df_full # too big to keep and useless
 
 # Collect information
 info_lines = []  # Store lines of information
-output_file_path = os.path.join(base_dir, f"plots/{network} {channel_prefix} {date_of_interest}/output.txt")
+output_file_path = os.path.join(base_dir, "plots/output.txt")
 
 # Process templates in batches of 20
-template_groups = [templates[i:i + 20] for i in range(67, len(templates), 20)]
+template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
 for batch_idx, template_group in enumerate(template_groups):
     try:
         # Iterate over all templates
@@ -198,6 +198,7 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write("\n".join(info_lines) + '\n\n')
             file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
 
-# Plot and save all summed traces on the new detected events time
+# # Plot and save all summed traces on the new detected events time
 window_size = 30
 crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir)
+# crosscorr_tools.plot_summed_traces_comparison(stas, channels, network, date_of_interest, base_dir, templates)
