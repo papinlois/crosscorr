@@ -284,7 +284,7 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
     
             # Save the plot as an image file
             save_path = os.path.join(base_dir, 'plots',
-                                     f'stack_vs_template_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
+                                     f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
             plt.savefig(save_path)
             plt.close()
 
@@ -473,6 +473,6 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
         
                 # Save the plot as an image file
                 save_path = os.path.join(base_dir, 'plots',
-                                         f'stack_vs_template_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
+                                         f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
                 plt.savefig(save_path)
                 plt.close()
