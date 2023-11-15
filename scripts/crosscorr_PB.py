@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct  3 15:56:50 2023
+Created on Tue Oct 27 15:56:50 2023
 
 @author: papin
 
@@ -22,6 +22,7 @@ Description (not specifically in order):
 11. Stack all detected events of each template.
 
 PS: Make sure to adjust the input parameters such as station names, channels, date_of_interest, templates.
+PSS: This script has been made for PB network for which the date format is different.
 
 As of 11/15/23.
 """
@@ -48,24 +49,21 @@ locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
 startscript = time.time()
 
 # List of stations/channels to analyze
-# CN network
-# stas = ['PFB', 'YOUB'] 
-# channels = ['HHN', 'HHE', 'HHZ']
-stas = ['LZB','SNB','PGC','NLLB'] 
-channels = ['BHN','BHE','BHZ']
+stas = ['B001', 'B009', 'B010', 'B011', 'B926']
+channels = ['EH1', 'EH2', 'EHZ']
 channel_prefix = channels[0][:2]
-network = 'CN'
+network = 'PB'
 
 # Hour and date of interest
 date_of_interest = "20100516"
-startdate=datetime.strptime(date_of_interest, "%Y%m%d")
-enddate=startdate+timedelta(days=1)
+startdate = datetime.strptime(date_of_interest, "%Y%m%d")
+enddate = startdate + timedelta(days=1)
 
 # Plot the data as it is
 crosscorr_tools.plot_data(date_of_interest, stas, channels, network, base_dir)
 
 # Get the streams and preprocess
-st = Stream(traces=crosscorr_tools.get_traces(stas, channels, date_of_interest, base_dir))
+st = Stream(traces=crosscorr_tools.get_traces_PB(stas, channels, startdate, network, base_dir))
 st, stas = crosscorr_tools.process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
 
 # Load LFE data on Tim's catalog
@@ -110,7 +108,7 @@ for batch_idx, template_group in enumerate(template_groups):
                 xcorr_templates.append(xcorr_template)
             
             xcorrfull = np.vstack(xcorr_templates)        
-            xcorrmean=np.mean(xcorrfull,axis=0)
+            xcorrmean = np.mean(xcorrfull, axis=0)
             
             del xcorr_template, xcorr_templates, xcorrfull
             
@@ -118,11 +116,11 @@ for batch_idx, template_group in enumerate(template_groups):
             mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
             thresh = 8
             aboves = np.where(xcorrmean > thresh * mad)
-    
+            
             # Construct a filename
             template_index = idx
             crosscorr_combination = f'net{network}_cha{channel_prefix}_templ{template_index}'
-            
+           
             # Calculate the duration of the data in seconds for the plot
             stream_duration = (st[0].stats.endtime - st[0].stats.starttime)
 
@@ -142,24 +140,22 @@ for batch_idx, template_group in enumerate(template_groups):
                 newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
                 # Find the index of the maximum value in newdect
                 max_index = np.argmax(xcorrmean[newdect])
-    
-                # Creation of the cross-correlation plot only if new events detected
                 if newdect.size > 1: 
-                    fig, ax = plt.subplots(figsize=(10,3))
-                    t=st[0].stats.delta*np.arange(len(xcorrmean))
-                    ax.plot(t,xcorrmean)
-                    ax.axhline(thresh*mad,color='red')
-                    ax.plot(newdect*st[0].stats.delta,xcorrmean[newdect],'kx')
-                    ax.plot((newdect*st[0].stats.delta)[max_index],
-                            (xcorrmean[newdect])[max_index],'gx', markersize=10, linewidth=10)
-                    ax.text(60,1.1*thresh*mad,'8*MAD',fontsize=14,color='red')
+                    fig, ax = plt.subplots(figsize=(10, 3))
+                    t = st[0].stats.delta * np.arange(len(xcorrmean))
+                    ax.plot(t, xcorrmean)
+                    ax.axhline(thresh * mad, color='red')
+                    ax.plot(newdect * st[0].stats.delta, xcorrmean[newdect], 'kx')
+                    ax.plot((newdect * st[0].stats.delta)[max_index],
+                            (xcorrmean[newdect])[max_index], 'gx', markersize=10, linewidth=10)
+                    ax.text(60, 1.1 * thresh * mad, '8*MAD', fontsize=14, color='red')
                     ax.set_xlabel('Time (s)', fontsize=14)
                     ax.set_ylabel('Correlation Coefficient', fontsize=14)
                     ax.set_xlim(0, stream_duration)
                     ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
                     plt.gcf().subplots_adjust(bottom=0.2)
                     plt.savefig(correlation_plot_filename)
-                    plt.close()
+                    plt.show()
                     del t, fig, ax
                     
                     # Create UTCDateTime objects from the newevent values
@@ -201,7 +197,7 @@ for batch_idx, template_group in enumerate(template_groups):
         with open(info_file_path, 'w', encoding='utf-8') as file:
             file.write(f"Date Range: {startdate} - {enddate}\n\n")
             file.write(f"Stations and Channel Used: {stations_used} --- {channels_used}\n\n")
-            file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
+            file.write(f"Script execution time: {script_execution_time:.2f} seconds\n\n")
             file.write("Templates:\n")
             file.write(templates.to_string() + '\n\n')
             file.write("No significant Correlations:\n") # if there is an issue and even the event template is not correlated
@@ -209,4 +205,4 @@ for batch_idx, template_group in enumerate(template_groups):
 
 # Plot and save all summed traces on the new detected events time
 window_size = 30
-crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir, templates)
+crosscorr_tools.plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir, templates)
