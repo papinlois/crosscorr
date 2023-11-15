@@ -83,13 +83,15 @@ This repository contains Python scripts for seismic data analysis and detection 
 
 The repository generates a series of plots in the `plots` directory. These plots include:
 
-- `station_locations.png`: A map showing the locations of the seismic stations.
-
 - `data_plot_<date>.png`: Plots of seismic data for the specified date and stations, with an offset for better visualization.
+
+- `station_events_locations.png`: A map showing the locations of the seismic stations and the event templates used for the cross-correlation.
 
 - `crosscorr_<network>_<channel>_templ<index>_<date>.png`: Cross-correlation plots for detected seismic events, highlighting significant correlations.
 
-- `sum_traces_net<network>_cha<channel>_det<index>.png`: Summed traces around detected seismic events, showing the combined signal.
+- `stack_net<network>_cha<channel>_det<index>.png`: Stack of the traces around detected seismic events, showing the combined signal.
+
+- `stack_vs_templ_net<network>_cha<channel>_templ<template_index>_<date>.png`: Subplots of the stack events with the corresponding template that was used to detect them.
 
 ### `output.txt`
 
@@ -113,14 +115,12 @@ The `info.txt` file serves as a summary and information log for the seismic data
 
 - Stations and Channel Used: Lists the stations and channels selected for analysis.
 
-- Templates: Provides information about the loaded seismic templates, including their datetime, latitude, longitude, and residual values.
-
-- No significant Correlations: Lists any seismic events or correlations that were detected but did not meet the significance threshold.
-
 - Script execution time: Records the total time taken to execute the script.
+
+- Templates: Provides information about the loaded seismic templates, including their datetime, latitude, longitude, and residual values.
 
 ## Author
 
 This script was crafted by [papin](https://github.com/papin), and it is made available as an open-source tool to advance seismic data analysis. Feel free to adapt and enhance the script to meet your specific research needs. If you encounter questions or require assistance, please don't hesitate to reach out to the author through their GitHub profile for guidance and support.
 
-As of 11/10/2023.
+As of 11/15/2023.
