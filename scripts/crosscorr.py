@@ -66,7 +66,7 @@ crosscorr_tools.plot_data(date_of_interest, stas, channels, network, base_dir)
 
 # Get the streams and preprocess
 st = Stream(traces=crosscorr_tools.get_traces(stas, channels, date_of_interest, base_dir))
-st, stas = crosscorr_tools.process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+st, stas = crosscorr_tools.process_data(st, stas, locs=locs, sampling_rate=80, freqmin=2.0, freqmax=8.0)
 
 # Load LFE data on Tim's catalog
 df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -90,7 +90,7 @@ info_lines = []  # Store lines of information
 output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
 
 # Process templates in batches of 20
-template_groups = [templates[i:i + 20] for i in range(0, len(templates), 20)]
+template_groups = [templates[i:i + 50] for i in range(260, len(templates), 50)]
 for batch_idx, template_group in enumerate(template_groups):
     try:
         # Iterate over all templates
@@ -201,12 +201,15 @@ for batch_idx, template_group in enumerate(template_groups):
         with open(info_file_path, 'w', encoding='utf-8') as file:
             file.write(f"Date Range: {startdate} - {enddate}\n\n")
             file.write(f"Stations and Channel Used: {stations_used} --- {channels_used}\n\n")
-            file.write(f"Script execution time: {script_execution_time:.2f} seconds\n")
+            file.write(f"Script execution time: {script_execution_time:.2f} seconds\n\n")
             file.write("Templates:\n")
             file.write(templates.to_string() + '\n\n')
             file.write("No significant Correlations:\n") # if there is an issue and even the event template is not correlated
             file.write("\n".join(info_lines) + '\n\n')
 
+    # break # 1st template group
+
 # Plot and save all summed traces on the new detected events time
 window_size = 30
+templates = templates.loc[[9]] # Specific template for the comparision
 crosscorr_tools.plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir, templates)

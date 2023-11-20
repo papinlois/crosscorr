@@ -39,7 +39,7 @@ def get_traces(stas, channels, date_of_interest, base_dir):
             except FileNotFoundError:
                 print(f"File {file} not found.")
 
-def process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0):
+def process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0):
     """
     Preprocess seismic data.
 
@@ -126,7 +126,7 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
             except FileNotFoundError:
                 print(f"File {file} not found.")
     
-    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0)
    
     plt.figure(figsize=(15, 5))
     nb = 10 # Distance between plots
@@ -176,7 +176,7 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
     st = Stream(traces=get_traces(stas, channels, date_of_interest, base_dir))
     channel_prefix = channels[0][:2]
 
-    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0)
 
     # Define the path to the detections file based on the provided date_of_interest
     output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
@@ -210,83 +210,47 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
         if template_index not in detect_summed_traces:
             detect_summed_traces[template_index] = []
         detect_summed_traces[template_index].append(summed_traces)
-
-    # Sum the traces for each template
+    
+    # Sum the traces for each template and plot
     for template_index, detect_traces in detect_summed_traces.items():
         # Sum the traces for the template
-        detect_sum = detect_traces[0].copy()  # Initialize with the first trace
-        for trace in detect_traces[1:]:
-            detect_sum.data += trace.data
-        
-        # Get the number of detections for the current template
-        num_detections = len(detect_traces)
-        
-        # Plot the summed trace for the template
-        plt.figure(figsize=(10, 6))
-        num_points = len(detect_sum.data)
-        times = np.linspace(0, window_size, num_points, endpoint=False)
-        plt.plot(times, detect_sum.data)
-        plt.xlabel('Time (s)')
-        plt.ylabel('Amplitude')
-        plt.title(f'Stack of {num_detections} detections net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}')
-        plt.xlim(0, window_size)
-        plt.grid(True)
-    
-        # Save the plot as an image file
-        save_path = os.path.join(base_dir, 'plots',
-                                 f'stack_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
-        plt.savefig(save_path)
-        plt.close()
-    
-        if templates is not None:
+        detect_sum = np.sum(detect_traces, axis=0)
+
+        if templates is not None and len(templates) > 1:
             # Get the template window on summed traces
             template_info = templates.loc[template_index]
             template_start_time = UTCDateTime(template_info['datetime'])
             start_window_template = template_start_time
             end_window_template = start_window_template + window_size
             windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
-    
+
             # Manually sum the traces within the template time window
-            summed_trace_template = windowed_traces_template[0].copy()  # Initialize with the first trace
-            for trace_template in windowed_traces_template[1:]:
-                summed_trace_template.data += trace_template.data
-    
+            summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
+
             # Plot the summed traces for the template and the detection
-            fig, axs = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
-    
-            # Plot the summed trace for the detection
-            num_points_detection = len(detect_sum.data)
-            times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
-            axs[0].plot(times_detection, detect_sum.data, label=f'Stack of {num_detections} detections', linestyle='-', color='C0')
-            axs[0].set_ylabel('Amplitude')
-            axs[0].grid(True)
-    
-            # Plot the summed trace for the template
-            num_points_template = len(summed_trace_template.data)
-            times_template = np.linspace(0, window_size, num_points_template, endpoint=False)
-            axs[1].plot(times_template, summed_trace_template.data, label=f'Template {template_index}', linestyle='--', color='C1')
-            axs[1].set_ylabel('Amplitude')
-            axs[1].grid(True)
-    
-            # Add a third subplot superimposing the data from subplots 1 and 2
-            axs[2].plot(times_detection, detect_sum.data, linestyle='-', color='C0')
-            axs[2].plot(times_template, summed_trace_template.data, linestyle='--', color='C1')
-            axs[2].set_xlabel('Time (s)')
-            axs[2].set_ylabel('Amplitude')
-            axs[2].grid(True)
-    
-            # Add legend for the entire figure
-            axs[0].legend(loc='upper right')
-            axs[1].legend(loc='upper right')
-    
-            # Add this line to ensure proper layout
-            plt.tight_layout()
-    
-            # Save the plot as an image file
-            save_path = os.path.join(base_dir, 'plots',
-                                     f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
-            plt.savefig(save_path)
-            plt.close()
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
+                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+
+        elif len(templates) == 1:
+            # Specific template for the comparison
+            template_index = templates.index.astype(int).tolist()[0]
+            detect_summed_traces = {template_index: detect_summed_traces[template_index]}
+            detect_traces = detect_summed_traces[template_index]
+            detect_sum = np.sum(detect_traces, axis=0)
+
+            # Get the template window on summed traces
+            template_info = templates.loc[template_index]
+            template_start_time = UTCDateTime(template_info['datetime'])
+            start_window_template = template_start_time
+            end_window_template = start_window_template + window_size
+            windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
+
+            # Manually sum the traces within the template time window
+            summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
+
+            # Plot the summed traces for the template and the detection
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
+                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
 
 def plot_locations(locs, base_dir, events=None):
     """
@@ -344,135 +308,126 @@ def get_traces_PB(stas, channels, startdate, network, base_dir):
             print(f"File {file} not found.")
    
 def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir, templates=None):
-        """
-        Preprocess seismic data and plot summed traces around detected events.
+    """
+    Preprocess seismic data and plot summed traces around detected events.
 
-        Parameters:
-            stas (list): List of station names.
-            channels (list): List of channel names.
-            window_size (int): Time window size in seconds.
-            network (str): Network identifier.
-            startdate (datetime): Start date of the seismic data collection in 'datetime' format.
-            date_of_interest (str): Date of interest in 'YYYYMMDD' format.
-            base_dir (str): The base directory for file paths.
-            templates (pd.DataFrame, optional): DataFrame containing template information.
-                Defaults to None.
-            
-        Returns:
-            None
-        """
-        # Get the data (so it can be called outside of crosscorr.py)
-        st = Stream(traces=get_traces_PB(stas, channels, startdate, network, base_dir))
-        channel_prefix = channels[0][:2]
-
-        st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
-
-        # Define the path to the detections file based on the provided date_of_interest
-        output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
-        detections_df = pd.read_csv(output_file_path)
-
-        # Create a dictionary to store summed traces for each template
-        detect_summed_traces = {}
-
-        # Iterate through the detections_df
-        for index, detection in detections_df.iterrows():
-            
-            # Get the template index for the detection
-            template_index = detection['templ']
-
-            # Get the start time from the dataframe and convert it to UTCDateTime
-            start_time = UTCDateTime(detection['starttime'])
-
-            # Define the time window using the start time
-            start_window = start_time
-            end_window = start_time + window_size
-
-            # Extract the traces within the time window
-            windowed_traces = st.slice(starttime=start_window, endtime=end_window)
-
-            # Manually sum the traces within the time window
-            summed_traces = windowed_traces[0].copy()  # Initialize with the first trace
-            for trace in windowed_traces[1:]:
-                summed_traces.data += trace.data
-
-            # Append the summed trace to the template's list
-            if template_index not in detect_summed_traces:
-                detect_summed_traces[template_index] = []
-            detect_summed_traces[template_index].append(summed_traces)
-
-        # Sum the traces for each template
-        for template_index, detect_traces in detect_summed_traces.items():
-            # Sum the traces for the template
-            detect_sum = detect_traces[0].copy()  # Initialize with the first trace
-            for trace in detect_traces[1:]:
-                detect_sum.data += trace.data
-            
-            # Get the number of detections for the current template
-            num_detections = len(detect_traces)
-            
-            # Plot the summed trace for the template
-            plt.figure(figsize=(10, 6))
-            num_points = len(detect_sum.data)
-            times = np.linspace(0, window_size, num_points, endpoint=False)
-            plt.plot(times, detect_sum.data)
-            plt.xlabel('Time (s)')
-            plt.ylabel('Amplitude')
-            plt.title(f'Stack of {num_detections} detections net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}')
-            plt.xlim(0, window_size)
-            plt.grid(True)
+    Parameters:
+        stas (list): List of station names.
+        channels (list): List of channel names.
+        window_size (int): Time window size in seconds.
+        network (str): Network identifier.
+        startdate (datetime): Start date of the seismic data collection in 'datetime' format.
+        date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+        base_dir (str): The base directory for file paths.
+        templates (pd.DataFrame, optional): DataFrame containing template information.
+            Defaults to None.
         
-            # Save the plot as an image file
-            save_path = os.path.join(base_dir, 'plots',
-                                     f'stack_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
-            plt.savefig(save_path)
-            plt.close()
+    Returns:
+        None
+    """
+    # Get the data (so it can be called outside of crosscorr.py)
+    st = Stream(traces=get_traces_PB(stas, channels, startdate, network, base_dir))
+    channel_prefix = channels[0][:2]
+
+    st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0)
+
+    # Define the path to the detections file based on the provided date_of_interest
+    output_file_path = os.path.join(base_dir, 'plots', f"{network} {channel_prefix} {date_of_interest}", 'output.txt')
+    detections_df = pd.read_csv(output_file_path)
+
+    # Create a dictionary to store summed traces for each template
+    detect_summed_traces = {}
+
+    # Iterate through the detections_df
+    for index, detection in detections_df.iterrows():
         
-            if templates is not None:
-                # Get the template window on summed traces
-                template_info = templates.loc[template_index]
-                template_start_time = UTCDateTime(template_info['datetime'])
-                start_window_template = template_start_time
-                end_window_template = start_window_template + window_size
-                windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
-        
-                # Manually sum the traces within the template time window
-                summed_trace_template = windowed_traces_template[0].copy()  # Initialize with the first trace
-                for trace_template in windowed_traces_template[1:]:
-                    summed_trace_template.data += trace_template.data
-        
-                # Plot the summed traces for the template and the detection
-                fig, axs = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
-        
-                # Plot the summed trace for the detection
-                num_points_detection = len(detect_sum.data)
-                times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
-                axs[0].plot(times_detection, detect_sum.data, label=f'Stack of {num_detections} detections', linestyle='-', color='C0')
-                axs[0].set_ylabel('Amplitude')
-                axs[0].grid(True)
-        
-                # Plot the summed trace for the template
-                num_points_template = len(summed_trace_template.data)
-                times_template = np.linspace(0, window_size, num_points_template, endpoint=False)
-                axs[1].plot(times_template, summed_trace_template.data, label=f'Template {template_index}', linestyle='--', color='C1')
-                axs[1].set_ylabel('Amplitude')
-                axs[1].grid(True)
-        
-                # Add a third subplot superimposing the data from subplots 1 and 2
-                axs[2].plot(times_detection, detect_sum.data, linestyle='-', color='C0')
-                axs[2].plot(times_template, summed_trace_template.data, linestyle='--', color='C1')
-                axs[2].set_xlabel('Time (s)')
-                axs[2].set_ylabel('Amplitude')
-                axs[2].grid(True)
-        
-                # Add legend for the entire figure
-                axs[0].legend(loc='upper right')
-                axs[1].legend(loc='upper right')
-        
-                # Add this line to ensure proper layout
-                plt.tight_layout()
-        
-                # Save the plot as an image file
-                save_path = os.path.join(base_dir, 'plots',
-                                         f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
-                plt.savefig(save_path)
-                plt.close()
+        # Get the template index for the detection
+        template_index = detection['templ']
+
+        # Get the start time from the dataframe and convert it to UTCDateTime
+        start_time = UTCDateTime(detection['starttime'])
+
+        # Define the time window using the start time
+        start_window = start_time
+        end_window = start_time + window_size
+
+        # Extract the traces within the time window
+        windowed_traces = st.slice(starttime=start_window, endtime=end_window)
+
+        # Manually sum the traces within the time window
+        summed_traces = np.sum([trace.data for trace in windowed_traces], axis=0)
+
+        # Append the summed trace to the template's list
+        detect_summed_traces.setdefault(template_index, []).append(summed_traces)
+
+    # Sum the traces for each template and plot
+    for template_index, detect_traces in detect_summed_traces.items():
+        # Sum the traces for the template
+        detect_sum = np.sum(detect_traces, axis=0)
+
+        if templates is not None and len(templates) > 1:
+            # Get the template window on summed traces
+            template_info = templates.loc[template_index]
+            template_start_time = UTCDateTime(template_info['datetime'])
+            start_window_template = template_start_time
+            end_window_template = start_window_template + window_size
+            windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
+
+            # Manually sum the traces within the template time window
+            summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
+
+            # Plot the summed traces for the template and the detection
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
+                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+
+        elif len(templates) == 1:
+            # Specific template for the comparison
+            template_index = templates.index.astype(int).tolist()[0]
+            detect_summed_traces = {template_index: detect_summed_traces[template_index]}
+            detect_traces = detect_summed_traces[template_index]
+            detect_sum = np.sum(detect_traces, axis=0)
+
+            # Get the template window on summed traces
+            template_info = templates.loc[template_index]
+            template_start_time = UTCDateTime(template_info['datetime'])
+            start_window_template = template_start_time
+            end_window_template = start_window_template + window_size
+            windowed_traces_template = st.slice(starttime=start_window_template, endtime=end_window_template)
+
+            # Manually sum the traces within the template time window
+            summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
+
+            # Plot the summed traces for the template and the detection
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
+                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+
+def plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections, network, channel_prefix, date_of_interest, base_dir):
+    # Plot the summed traces for the template and the detection
+    fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+    # Plot the summed trace for the detection
+    num_points_detection = len(detect_sum)
+    times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
+    axs[0].plot(times_detection, detect_sum, label=f'Stack of {num_detections} detections', linestyle='-', color='C0')
+    axs[0].set_ylabel('Amplitude')
+    axs[0].grid(True)
+
+    # Plot the summed trace for the template
+    num_points_template = len(summed_trace_template)
+    times_template = np.linspace(0, window_size, num_points_template, endpoint=False)
+    axs[1].plot(times_template, summed_trace_template, label=f'Template {template_index}', linestyle='--', color='C1')
+    axs[1].set_ylabel('Amplitude')
+    axs[1].grid(True)
+
+    # Add legend for the entire figure
+    axs[0].legend(loc='upper right')
+    axs[1].legend(loc='upper right')
+
+    # Add this line to ensure proper layout
+    plt.tight_layout()
+
+    # Save the plot as an image file
+    save_path = os.path.join(base_dir, 'plots',
+                             f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
+    plt.savefig(save_path)
+    plt.close()

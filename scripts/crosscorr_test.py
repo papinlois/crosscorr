@@ -9,90 +9,113 @@ a fast look at the crosscorrelation between a template and a stream, as well as 
 """
 
 import time
-from datetime import datetime, timedelta
-import numpy as np
+from datetime import timedelta
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from obspy.core import read
-import autocorr_tools
-import crosscorr_tools
+from obspy import Stream
+from matplotlib.gridspec import GridSpec
 
 # Start timer
 startscript = time.time()
 
-# Parameters
-sta = ['POHA']
-cha = ['BH1']
-network = 'IU'
-date_of_interest = "20100729"
-
 # Load and preprocess data
-startdate = datetime.strptime(date_of_interest, "%Y%m%d")
-enddate = startdate + timedelta(days=1)
-st = read('POHA..BH1.2000-07-29-00-00-00.ms')
-st.trim(starttime=UTCDateTime(2000, 7, 29, 8, 0, 0), endtime=UTCDateTime(2000, 7, 29, 9, 0, 0))  # Added endtime argument
-st.interpolate(sampling_rate=20, starttime=st[0].stats.starttime)
-st.detrend(type='simple')
-st.filter("bandpass", freqmin=2, freqmax=7)
+st=Stream()
+cha='EH2'
+if cha=='EH1':
+    comp=0
+elif cha=='EH2':
+    comp=1
+elif cha=='EHZ':
+    comp=2
 
-# Plot full stream
-plt.figure(figsize=(15, 5))
-plt.plot(st[0].times('matplotlib'), st[0].data, label=f"{sta}_{cha}")
-plt.xlabel('Time (s)', fontsize=14)
-plt.ylabel('Ampl', fontsize=14)
-plt.title('Stream', fontsize=16)
-plt.grid(True)
-plt.xlim(st[0].times('matplotlib').min(), st[0].times('matplotlib').max())  # Set xlim to min and max of the data
-plt.savefig('crosscorr_test_mine1')
-plt.show()
+st = read('C:/Users/papin/Desktop/phd/data/seed/B009.PB.2010.137')
+st.filter("bandpass", freqmin=2, freqmax=8)
+st.merge()
+# st.detrend(type='simple')
+# st.interpolate(sampling_rate=80, starttime=st[comp].stats.starttime)
 
-# Define templates
-template1_start = UTCDateTime(2000, 7, 29, 8, 27, 36)
-template1_end = UTCDateTime(2000, 7, 29, 8, 27, 45)
-template1 = st.copy().trim(starttime=template1_start, endtime=template1_end)
+# Template 46
+template=st.copy().trim(starttime=UTCDateTime(2010, 5, 17, 1, 54, 44),endtime=UTCDateTime(2010, 5, 17, 1, 55, 14))
+st.trim(starttime=UTCDateTime(2010, 5, 17, 13, 0, 0), endtime=UTCDateTime(2010, 5, 17, 14, 0, 0))
 
-template2_start = UTCDateTime(2000, 7, 29, 8, 57, 26.5)
-template2_end = UTCDateTime(2000, 7, 29, 8, 57, 35.5)
-template2 = st.copy().trim(starttime=template2_start, endtime=template2_end)
+# Get some detections for examples
+detection1_start = UTCDateTime(2010, 5, 17, 13, 9, 34)
+# detection1_start = UTCDateTime(2010, 5, 17, 3, 43, 56)
+detection1_end = detection1_start + timedelta(seconds=30)
+detection1 = st.copy().trim(starttime=detection1_start, endtime=detection1_end)
 
-# Which one
-template = template1
+detection2_start = UTCDateTime(2010, 5, 17, 13, 43, 59)
+# detection2_start = UTCDateTime(2010, 5, 17, 7, 5, 54)
+detection2_end = detection2_start + timedelta(seconds=30)
+detection2 = st.copy().trim(starttime=detection2_start, endtime=detection2_end)
 
-# Plot template
-plt.figure(figsize=(15, 5))
-plt.plot(template[0].times('matplotlib'), template[0].data, label='Template')
-plt.xlabel('Time (s)', fontsize=14)
-plt.ylabel('Ampl', fontsize=14)
-plt.title('Template', fontsize=16)
-plt.grid(True)
-plt.show()
+detection3_start = UTCDateTime(2010, 5, 17, 13, 51, 53)
+# detection3_start = UTCDateTime(2010, 5, 17, 10, 30, 57)
+detection3_end = detection3_start + timedelta(seconds=30)
+detection3 = st.copy().trim(starttime=detection3_start, endtime=detection3_end)
 
-# Cross-correlation
-xcorr_template = autocorr_tools.correlate_template(st[0].data, template[0].data, mode='valid', normalize='full', demean=True, method='auto')
+# detection4_start = UTCDateTime(2010, 5, 17, 13, 43, 59)
+# detection4_end = detection4_start + timedelta(seconds=30)
+# detection4 = st.copy().trim(starttime=detection4_start, endtime=detection4_end)
 
-# Detection and plotting
-thresh = 0.8
-aboves = np.where(xcorr_template > thresh)
+# detection5_start = UTCDateTime(2010, 5, 17, 15, 44, 52)
+# detection5_end = detection5_start + timedelta(seconds=30)
+# detection5 = st.copy().trim(starttime=detection5_start, endtime=detection5_end)
 
-stream_duration = st[0].stats.endtime - st[0].stats.starttime
-windowlen = template[0].stats.npts
-inds = np.where(xcorr_template > thresh)[0]
-clusters = autocorr_tools.clusterdects(inds, windowlen)
-newdect = autocorr_tools.culldects(inds, clusters, xcorr_template)
-max_index = np.argmax(xcorr_template[newdect])
+# detection6_start = UTCDateTime(2010, 5, 17, 22, 17, 35)
+# detection6_end = detection6_start + timedelta(seconds=30)
+# detection6 = st.copy().trim(starttime=detection6_start, endtime=detection6_end)
 
-if newdect.size > 1:
-    fig, ax = plt.subplots(figsize=(15, 5))
-    t = st[0].stats.delta * np.arange(len(xcorr_template))
-    ax.plot(t, xcorr_template)
-    ax.axhline(thresh, color='red')
-    ax.plot(newdect * st[0].stats.delta, xcorr_template[newdect], 'kx')
-    ax.plot((newdect * st[0].stats.delta)[max_index], (xcorr_template[newdect])[max_index], 'gx', markersize=10, linewidth=10)
-    ax.text(60, 1.1 * thresh, '0.8', fontsize=14, color='red')
-    ax.set_xlabel('Time (s)', fontsize=14)
-    ax.set_ylabel('Coefficient', fontsize=14)
-    ax.set_xlim(0, stream_duration)
-    plt.title('Cross-Correlation', fontsize=16)
-    plt.gcf().subplots_adjust(bottom=0.2)
-    plt.savefig('crosscorr_test_mine2')
-    plt.show()
+# Create the figure
+fig = plt.figure(constrained_layout=True,figsize=(18,8))
+fig.suptitle('Seismic Data and Detections', fontsize=16)  # Add this line for the figure title
+gs = GridSpec(2, 3, figure=fig)
+ax1 = fig.add_subplot(gs[0, 0])
+ax2 = fig.add_subplot(gs[0, 1])
+ax3 = fig.add_subplot(gs[0, 2])
+ax4 = fig.add_subplot(gs[1, :])
+# ax4 = fig.add_subplot(gs[1, 0])
+# ax5 = fig.add_subplot(gs[1, 1])
+# ax6 = fig.add_subplot(gs[1, 2])
+
+# Plot detections
+ax1.plot(detection1[comp].times('relative'),detection1[comp].data,'tab:red')
+ax1.set_xlim((detection1[comp].times('relative')[0],detection1[comp].times('relative')[-1]))
+ax1.set_xlabel('Time(s)',fontsize=14)
+ax1.set_ylabel('Counts',fontsize=14)
+
+ax2.plot(detection2[comp].times('relative'),detection2[comp].data,'tab:green')
+ax2.set_xlim((detection2[comp].times('relative')[0],detection2[comp].times('relative')[-1]))
+ax2.set_xlabel('Time(s)',fontsize=14)
+ax2.set_ylabel('Counts',fontsize=14)
+
+ax3.plot(detection3[comp].times('relative'),detection3[comp].data,'tab:orange')
+ax3.set_xlim((detection3[comp].times('relative')[0],detection3[comp].times('relative')[-1]))
+ax3.set_xlabel('Time(s)',fontsize=14)
+ax3.set_ylabel('Counts',fontsize=14)
+
+# Raw data with highlights of detections
+ax4.plot_date(st[comp].times('matplotlib'),st[comp].data,'tab:grey',xdate=True)
+ax4.plot_date(detection1[comp].times('matplotlib'),detection1[comp].data,'tab:red',xdate=True)
+ax4.plot_date(detection2[comp].times('matplotlib'),detection2[comp].data,'tab:green',xdate=True)
+ax4.plot_date(detection3[comp].times('matplotlib'),detection3[comp].data,'tab:orange',xdate=True)
+ax4.set_xlim((st[comp].times('matplotlib')[0],st[comp].times('matplotlib')[-1]))
+ax4.set_xlabel('Time(s)',fontsize=14)
+ax4.set_ylabel('Counts',fontsize=14)
+
+# # Plot detections
+# ax4.plot(detection4[comp].times('relative'),detection4[comp].data,'tab:blue')
+# ax4.set_xlim((detection4[comp].times('relative')[0],detection4[comp].times('relative')[-1]))
+# ax4.set_xlabel('Time(s)',fontsize=14)
+# ax4.set_ylabel('Counts',fontsize=14)
+
+# ax5.plot(detection5[comp].times('relative'),detection5[comp].data,'tab:brown')
+# ax5.set_xlim((detection5[comp].times('relative')[0],detection5[comp].times('relative')[-1]))
+# ax5.set_xlabel('Time(s)',fontsize=14)
+# ax5.set_ylabel('Counts',fontsize=14)
+
+# ax6.plot(detection6[comp].times('relative'),detection6[comp].data,'tab:purple')
+# ax6.set_xlim((detection6[comp].times('relative')[0],detection6[comp].times('relative')[-1]))
+# ax6.set_xlabel('Time(s)',fontsize=14)
+# ax6.set_ylabel('Counts',fontsize=14)

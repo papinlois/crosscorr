@@ -50,12 +50,12 @@ startscript = time.time()
 
 # List of stations/channels to analyze
 stas = ['B001', 'B009', 'B010', 'B011', 'B926']
-channels = ['EH1', 'EH2', 'EHZ']
+channels = ['EH1','EH2','EHZ']
 channel_prefix = channels[0][:2]
 network = 'PB'
 
 # Hour and date of interest
-date_of_interest = "20100516"
+date_of_interest = "20100517"
 startdate = datetime.strptime(date_of_interest, "%Y%m%d")
 enddate = startdate + timedelta(days=1)
 
@@ -64,7 +64,7 @@ crosscorr_tools.plot_data(date_of_interest, stas, channels, network, base_dir)
 
 # Get the streams and preprocess
 st = Stream(traces=crosscorr_tools.get_traces_PB(stas, channels, startdate, network, base_dir))
-st, stas = crosscorr_tools.process_data(st, stas, locs=None, sampling_rate=80, freqmin=1.0, freqmax=10.0)
+st, stas = crosscorr_tools.process_data(st, stas, locs=locs, sampling_rate=80, freqmin=2.0, freqmax=8.0)
 
 # Load LFE data on Tim's catalog
 df_full=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -155,7 +155,7 @@ for batch_idx, template_group in enumerate(template_groups):
                     ax.set_title(f'{crosscorr_combination} - {date_of_interest}', fontsize=16)
                     plt.gcf().subplots_adjust(bottom=0.2)
                     plt.savefig(correlation_plot_filename)
-                    plt.show()
+                    plt.close()
                     del t, fig, ax
                     
                     # Create UTCDateTime objects from the newevent values
@@ -202,7 +202,10 @@ for batch_idx, template_group in enumerate(template_groups):
             file.write(templates.to_string() + '\n\n')
             file.write("No significant Correlations:\n") # if there is an issue and even the event template is not correlated
             file.write("\n".join(info_lines) + '\n\n')
+        
+    # break # 1st template group
 
 # Plot and save all summed traces on the new detected events time
 window_size = 30
+templates = templates.loc[[46]] # Specific template for the comparision
 crosscorr_tools.plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir, templates)
