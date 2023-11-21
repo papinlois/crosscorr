@@ -20,35 +20,32 @@ Functions:
 """
 
 import os
+from datetime import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import autocorr_tools
 from obspy import UTCDateTime
 from obspy.core import Stream, read
-from datetime import datetime
 
 def get_traces(stas, channels, date_of_interest, base_dir):
+    path = os.path.join(base_dir, 'data', 'seed')
     for cha in channels:
         for sta in stas:
-            path = os.path.join(base_dir, 'data', 'seed')
             file = os.path.join(path, f"{date_of_interest}.CN.{sta}..{cha}.mseed")
             try:
-                tr = read(file)[0]
-                yield tr
+                yield read(file)[0]
             except FileNotFoundError:
                 print(f"File {file} not found.")
-                
+
 def get_traces_PB(stas, channels, startdate, network, base_dir):
+    day_of_year = startdate.timetuple().tm_yday
+    year = startdate.timetuple().tm_year
+    path = os.path.join(base_dir, 'data', 'seed')
     for sta in stas:
-        day_of_year = startdate.timetuple().tm_yday
-        year = startdate.timetuple().tm_year
-        path = os.path.join(base_dir, 'data', 'seed')
         file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
         try:
             for cha in range(len(channels)):
-                tr = read(file)[cha]
-                yield tr
+                yield read(file)[cha]
         except FileNotFoundError:
             print(f"File {file} not found.")
 
@@ -57,7 +54,7 @@ def process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0
     Preprocess seismic data.
 
     Parameters:
-        st (obspy.core.Stream): Seismic data stream.
+        st (obspy.core.Stream): Seismic data streams.
         stas (list): List of station names.
         locs (numpy.ndarray, optional): Array containing station locations.
         sampling_rate (float): Sampling rate for interpolation.
@@ -65,10 +62,10 @@ def process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0
         freqmax (float): Maximum frequency for bandpass filtering.
 
     Returns:
-        st (obspy.core.Stream): Seismic data stream.
+        st (obspy.core.Stream): Seismic data streams.
         stas (list): List of station names.
     """
-    # Filter out traces that don't have the required number of data points
+    # Filter out traces that don't have the required number of data points (a day)
     st = Stream(traces=[tr for tr in st if tr.stats.npts * tr.stats.delta == 86400])
 
     if not st:
@@ -81,18 +78,18 @@ def process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0
         tr.interpolate(sampling_rate=sampling_rate, starttime=tr.stats.starttime)
         tr.detrend(type='simple')
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
-    
+
     # Filter stas based on available traces
     stas_with_data = [tr.stats.station for tr in st]
     stas = [sta for sta in stas if sta in stas_with_data]
-    
+
     # Add locations if locs is provided
     if locs is not None:
         for sta_idx, sta in enumerate(stas):
             ind = np.where(locs[:, 0] == sta)
             st[sta_idx].stats.y = locs[ind, 1][0][0]
             st[sta_idx].stats.x = locs[ind, 2][0][0]
-    
+
     return st, stas
 
 def plot_data(date_of_interest, stas, channels, network, base_dir):
@@ -100,54 +97,48 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
     Plot seismic station data for a specific date.
 
     Parameters:
-        date_of_interest (str): The date in the format 'YYYYMMDD' 
+        date_of_interest (str): The date in the format 'YYYYMMDD'
         for which you want to plot the data.
         stas (list of str): List of station names.
         channels (list of str): List of channel names.
-        network (str): Network code ('CN' or 'PB').
+        network (str): Network code ('CN' or 'PB' for now).
         base_dir (str): The base directory for file paths.
-        
+
     Returns:
         None
     """
-    # Initialize an empty Stream to hold the seismic data
     st = Stream()
+    path = os.path.join(base_dir, 'data', 'seed')
 
-    if network == 'CN':
-        # Load seismic data for the specified stations and channels (CN network)
-        for sta in stas:
+    for sta in stas:
+        if network == 'CN':
             for cha in channels:
-                path = os.path.join(base_dir, 'data', 'seed')
                 file = os.path.join(path, f"{date_of_interest}.CN.{sta}..{cha}.mseed")
                 try:
-                    tr = read(file)[0]
-                    st += tr
+                    st += read(file)[0]
                 except FileNotFoundError:
                     print(f"File {file} not found.")
-    elif network == 'PB':
-        # Load seismic data for the specified stations and channels (PB network)
-        for sta in stas:
+        elif network == 'PB':
             startdate = datetime.strptime(date_of_interest, "%Y%m%d")
             day_of_year = startdate.timetuple().tm_yday
             year = startdate.timetuple().tm_year
-            path = os.path.join(base_dir, 'data', 'seed')
             file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
             try:
                 for cha in range(len(channels)):
-                    tr = read(file)[cha]
-                    st += tr
+                    st += read(file)[cha]
             except FileNotFoundError:
                 print(f"File {file} not found.")
-    
+
     st, stas = process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0)
-   
+
     plt.figure(figsize=(15, 5))
     nb = 10 # Distance between plots
     offset = len(stas) * len(channels) * nb
-    
+
     # Get the start date from the first trace in the stream
     start_date = st[0].stats.starttime.strftime("%Y%m%d")
-    
+
+    # Plot the data
     for sta_idx, sta in enumerate(stas):
         for cha_idx, cha in enumerate(channels):
             # Calculate color shade
@@ -188,7 +179,7 @@ def plot_locations(locs, base_dir, events=None):
         None
     """
     plt.figure()
-    
+
     # Separate stations by network and plot them in different colors
     for name, lon, lat, network in locs:
         if network == 'CN':
@@ -196,13 +187,13 @@ def plot_locations(locs, base_dir, events=None):
         elif network == 'PB':
             plt.plot(lon, lat, 'ro')
         plt.text(lon, lat, name)
-    
+
     # Plot events if provided
     if events is not None:
         plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
         # plt.colorbar(scatter, label='Depth') #c='events['depth']'
         date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
-    
+
     plt.legend(loc='upper right')
     plt.xlabel('Longitude')
     plt.ylabel('Latitude')
@@ -223,7 +214,7 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
         base_dir (str): The base directory for file paths.
         templates (pd.DataFrame, optional): DataFrame containing template information.
             Defaults to None.
-        
+
     Returns:
         None
     """
@@ -241,15 +232,13 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
     detect_summed_traces = {}
 
     # Iterate through the detections_df
-    for index, detection in detections_df.iterrows():
-        
+    for _, detection in detections_df.iterrows():
+
         # Get the template index for the detection
         template_index = detection['templ']
 
-        # Get the start time from the dataframe and convert it to UTCDateTime
+        # Define the time window
         start_time = UTCDateTime(detection['starttime'])
-
-        # Define the time window using the start time
         start_window = start_time
         end_window = start_time + window_size
 
@@ -257,15 +246,11 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
         windowed_traces = st.slice(starttime=start_window, endtime=end_window)
 
         # Manually sum the traces within the time window
-        summed_traces = windowed_traces[0].copy()  # Initialize with the first trace
-        for trace in windowed_traces[1:]:
-            summed_traces.data += trace.data
+        summed_traces = np.sum([trace.data for trace in windowed_traces], axis=0)
 
         # Append the summed trace to the template's list
-        if template_index not in detect_summed_traces:
-            detect_summed_traces[template_index] = []
-        detect_summed_traces[template_index].append(summed_traces)
-    
+        detect_summed_traces.setdefault(template_index, []).append(summed_traces)
+
     # Sum the traces for each template and plot
     for template_index, detect_traces in detect_summed_traces.items():
         # Sum the traces for the template
@@ -307,7 +292,7 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
             plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network,
                                  channel_prefix, date_of_interest, base_dir, num_detections=len(detect_traces))
             break
-        
+
 def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir, templates=None):
     """
     Preprocess PB network seismic data and plot summed traces around detected events.
@@ -322,7 +307,7 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
         base_dir (str): The base directory for file paths.
         templates (pd.DataFrame, optional): DataFrame containing template information.
             Defaults to None.
-        
+
     Returns:
         None
     """
@@ -340,15 +325,13 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
     detect_summed_traces = {}
 
     # Iterate through the detections_df
-    for index, detection in detections_df.iterrows():
-        
+    for _, detection in detections_df.iterrows():
+
         # Get the template index for the detection
         template_index = detection['templ']
 
-        # Get the start time from the dataframe and convert it to UTCDateTime
+        # Define the time window
         start_time = UTCDateTime(detection['starttime'])
-
-        # Define the time window using the start time
         start_window = start_time
         end_window = start_time + window_size
 
@@ -423,7 +406,7 @@ def plot_combined_traces(window_size, detect_sum, summed_trace_template, templat
     """
     ## 1st figure
     # Plot the summed traces for the template and the detections
-    fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+    _, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
     # Plot the summed trace for the detection
     num_points_detection = len(detect_sum)
@@ -451,7 +434,7 @@ def plot_combined_traces(window_size, detect_sum, summed_trace_template, templat
                              f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
     plt.savefig(save_path)
     plt.close()
-    
+
     ## 2nd figure
     # Plot only the summed traces of detections
     plt.figure(figsize=(10, 6))
@@ -459,7 +442,7 @@ def plot_combined_traces(window_size, detect_sum, summed_trace_template, templat
     num_points_detection = len(detect_sum)
     times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
     plt.plot(times_detection, detect_sum, label=f'Stack of {num_detections} detections', linestyle='-', color='C0')
-    
+
     # Label the x-axis, y-axis, and title
     plt.xlabel('Time (s)')
     plt.ylabel('Amplitude')

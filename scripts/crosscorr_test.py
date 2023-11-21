@@ -3,7 +3,8 @@
 Created on Tue Nov 13 10:28:22 2023
 
 This script is a simplified version of crosscorr.py that is intended to provide
-a fast look at the crosscorrelation between a template and a stream, as well as their data.
+a fast look at the crosscorrelation between a template and a stream, as well as
+their data. You need the times to be able to plot.
 
 @author: papin
 """
@@ -21,13 +22,10 @@ startscript = time.time()
 
 # Load and preprocess data
 st=Stream()
-cha='EH2'
-if cha=='EH1':
-    comp=0
-elif cha=='EH2':
-    comp=1
-elif cha=='EHZ':
-    comp=2
+
+channel_dict = {'EH1': 0, 'EH2': 1, 'EHZ': 2}
+cha = 'EH2'
+comp = channel_dict.get(cha, None)
 
 st = read('C:/Users/papin/Desktop/phd/data/seed/B009.PB.2010.137')
 st.filter("bandpass", freqmin=2, freqmax=8)
@@ -36,7 +34,8 @@ st.merge()
 # st.interpolate(sampling_rate=80, starttime=st[comp].stats.starttime)
 
 # Template 46
-template=st.copy().trim(starttime=UTCDateTime(2010, 5, 17, 1, 54, 44),endtime=UTCDateTime(2010, 5, 17, 1, 55, 14))
+template=st.copy().trim(starttime=UTCDateTime(2010, 5, 17, 1, 54, 44),
+                        endtime=UTCDateTime(2010, 5, 17, 1, 55, 14))
 st.trim(starttime=UTCDateTime(2010, 5, 17, 13, 0, 0), endtime=UTCDateTime(2010, 5, 17, 14, 0, 0))
 
 # Get some detections for examples
