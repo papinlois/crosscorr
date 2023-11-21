@@ -7,13 +7,14 @@ The functions cover loading and preprocessing data, plotting seismic traces, cre
 summed traces around detected events, and more.
 
 Functions:
-- get_traces: Load seismic data from specified stations and channels for a given date.
+- get_traces: Load seismic data for specified stations, channels, and date.
+- get_traces_PB: Load seismic data from the PB network for specified stations, channels, and date.
 - process_data: Preprocess seismic data, including interpolation, trimming, detrending, and filtering.
 - plot_data: Plot seismic station data for a specific date, including normalized traces with an offset.
+- plot_locations: Create a plot of station locations and template events on a map.
 - plot_summed_traces: Preprocess seismic data and plot summed traces around detected events.
-- plot_station_locations: Create a plot of station locations on a map.
-- get_traces_PB: Load seismic data from the PB network for specified stations, channels, and date.
 - plot_summed_traces_PB: Preprocess PB network seismic data and plot summed traces around detected events.
+- plot_combined_traces: Plot the combined traces for a detection and its corresponding template
 
 @author: papin
 """
@@ -22,7 +23,6 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.colorbar as clrbar
 import autocorr_tools
 from obspy import UTCDateTime
 from obspy.core import Stream, read
@@ -38,6 +38,19 @@ def get_traces(stas, channels, date_of_interest, base_dir):
                 yield tr
             except FileNotFoundError:
                 print(f"File {file} not found.")
+                
+def get_traces_PB(stas, channels, startdate, network, base_dir):
+    for sta in stas:
+        day_of_year = startdate.timetuple().tm_yday
+        year = startdate.timetuple().tm_year
+        path = os.path.join(base_dir, 'data', 'seed')
+        file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
+        try:
+            for cha in range(len(channels)):
+                tr = read(file)[cha]
+                yield tr
+        except FileNotFoundError:
+            print(f"File {file} not found.")
 
 def process_data(st, stas, locs=None, sampling_rate=80, freqmin=2.0, freqmax=8.0):
     """
@@ -155,6 +168,48 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
     plt.savefig(os.path.join(base_dir, 'plots', f'data_plot_{start_date}.png'))
     plt.close()
 
+def plot_locations(locs, base_dir, events=None):
+    """
+    Create a plot of station locations and template events on a map.
+
+    Parameters:
+        locs (list of tuples): A list of tuples, where each tuple contains
+        station name, longitude, and latitude.
+        base_dir (str): The base directory for file paths.
+        events (DataFrame or None): A DataFrame containing event data with
+        columns 'lon','lat','depth', and 'datetime', or None if no events are provided.
+
+    This function creates a scatter plot of station locations and labels them
+    with station names. If events are provided, the function also plots the
+    events and labels them with 'Events'. The resulting plot is saved as
+    'station_events_locations_{date}.png'.
+
+    Returns:
+        None
+    """
+    plt.figure()
+    
+    # Separate stations by network and plot them in different colors
+    for name, lon, lat, network in locs:
+        if network == 'CN':
+            plt.plot(lon, lat, 'bo')
+        elif network == 'PB':
+            plt.plot(lon, lat, 'ro')
+        plt.text(lon, lat, name)
+    
+    # Plot events if provided
+    if events is not None:
+        plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
+        # plt.colorbar(scatter, label='Depth') #c='events['depth']'
+        date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
+    
+    plt.legend(loc='upper right')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.title(f'Station and Events Locations on {date}')
+    plt.savefig(os.path.join(base_dir, 'plots', f'station_events_locations_{date}.png'))
+    plt.close()
+
 def plot_summed_traces(stas, channels, window_size, network, date_of_interest, base_dir, templates=None):
     """
     Preprocess seismic data and plot summed traces around detected events.
@@ -228,8 +283,8 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
             summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
 
             # Plot the summed traces for the template and the detection
-            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
-                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network,
+                                 channel_prefix, date_of_interest, base_dir, num_detections=len(detect_traces))
 
         elif len(templates) == 1:
             # Specific template for the comparison
@@ -249,67 +304,13 @@ def plot_summed_traces(stas, channels, window_size, network, date_of_interest, b
             summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
 
             # Plot the summed traces for the template and the detection
-            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
-                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
-
-def plot_locations(locs, base_dir, events=None):
-    """
-    Create a plot of station locations and new detected events on a map.
-
-    Parameters:
-        locs (list of tuples): A list of tuples, where each tuple contains
-        station name, longitude, and latitude.
-        base_dir (str): The base directory for file paths.
-        events (DataFrame or None): A DataFrame containing event data with
-        columns 'lon','lat','depth', and 'datetime', or None if no events are provided.
-
-    This function creates a scatter plot of station locations and labels them
-    with station names. If events are provided, the function also plots the
-    events and labels them with 'Events'. The resulting plot is saved as
-    'station_events_locations_{date}.png'.
-
-    Returns:
-        None
-    """
-    plt.figure()
-    
-    # Separate stations by network and plot them in different colors
-    for name, lon, lat, network in locs:
-        if network == 'CN':
-            plt.plot(lon, lat, 'bo')
-        elif network == 'PB':
-            plt.plot(lon, lat, 'ro')
-        plt.text(lon, lat, name)
-    
-    # Plot events if provided
-    if events is not None:
-        plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
-        # plt.colorbar(scatter, label='Depth') #c='events['depth']'
-        date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
-    
-    plt.legend(loc='upper right')
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
-    plt.title(f'Station and Events Locations on {date}')
-    plt.savefig(os.path.join(base_dir, 'plots', f'station_events_locations_{date}.png'))
-    plt.close()
-
-def get_traces_PB(stas, channels, startdate, network, base_dir):
-    for sta in stas:
-        day_of_year = startdate.timetuple().tm_yday
-        year = startdate.timetuple().tm_year
-        path = os.path.join(base_dir, 'data', 'seed')
-        file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
-        try:
-            for cha in range(len(channels)):
-                tr = read(file)[cha]
-                yield tr
-        except FileNotFoundError:
-            print(f"File {file} not found.")
-   
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network,
+                                 channel_prefix, date_of_interest, base_dir, num_detections=len(detect_traces))
+            break
+        
 def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_of_interest, base_dir, templates=None):
     """
-    Preprocess seismic data and plot summed traces around detected events.
+    Preprocess PB network seismic data and plot summed traces around detected events.
 
     Parameters:
         stas (list): List of station names.
@@ -377,8 +378,8 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
             summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
 
             # Plot the summed traces for the template and the detection
-            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
-                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network,
+                                 channel_prefix, date_of_interest, base_dir, num_detections=len(detect_traces))
 
         elif len(templates) == 1:
             # Specific template for the comparison
@@ -398,11 +399,30 @@ def plot_summed_traces_PB(stas, channels, window_size, network, startdate, date_
             summed_trace_template = np.sum([trace.data for trace in windowed_traces_template], axis=0)
 
             # Plot the summed traces for the template and the detection
-            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections=len(detect_traces),
-                                 network=network, channel_prefix=channel_prefix, date_of_interest=date_of_interest, base_dir=base_dir)
+            plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network,
+                                 channel_prefix, date_of_interest, base_dir, num_detections=len(detect_traces))
+            break
 
-def plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, num_detections, network, channel_prefix, date_of_interest, base_dir):
-    # Plot the summed traces for the template and the detection
+def plot_combined_traces(window_size, detect_sum, summed_trace_template, template_index, network, channel_prefix, date_of_interest, base_dir, num_detections):
+    """
+    Plot the combined traces for a detection and its corresponding template.
+
+    Parameters:
+        window_size (int): Time window size in seconds.
+        detect_sum (numpy.ndarray): Summed trace for the detection.
+        summed_trace_template (numpy.ndarray): Summed trace for the template.
+        template_index (int): Index of the template.
+        network (str): Network identifier.
+        channel_prefix (str): Prefix of the channel.
+        date_of_interest (str): Date of interest in 'YYYYMMDD' format.
+        base_dir (str): The base directory for file paths.
+        num_detections (int): Number of detections in the stack.
+
+   Returns:
+        None
+    """
+    ## 1st figure
+    # Plot the summed traces for the template and the detections
     fig, axs = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
     # Plot the summed trace for the detection
@@ -431,3 +451,24 @@ def plot_combined_traces(window_size, detect_sum, summed_trace_template, templat
                              f'stack_vs_templ_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
     plt.savefig(save_path)
     plt.close()
+    
+    ## 2nd figure
+    # Plot only the summed traces of detections
+    plt.figure(figsize=(10, 6))
+
+    num_points_detection = len(detect_sum)
+    times_detection = np.linspace(0, window_size, num_points_detection, endpoint=False)
+    plt.plot(times_detection, detect_sum, label=f'Stack of {num_detections} detections', linestyle='-', color='C0')
+    
+    # Label the x-axis, y-axis, and title
+    plt.xlabel('Time (s)')
+    plt.ylabel('Amplitude')
+    plt.title(f'Stack of {num_detections} detections net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}')
+    plt.xlim(0, window_size)
+    plt.grid(True)
+
+    # Save the plot as an image file
+    save_path = os.path.join(base_dir, 'plots',
+                             f'stack_net{network}_cha{channel_prefix}_templ{template_index}_{date_of_interest}.png')
+    plt.savefig(save_path)
+    plt.show()
