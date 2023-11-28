@@ -99,6 +99,8 @@ def process_data(st, stas, locs=None, sampling_rate=40, freqmin=2.0, freqmax=8.0
         stas (list): List of station names.
     """
     # Filter out traces that don't have the required number of data points (a day)
+    # TODO: You dont want to throw out days that dont have full data.  Instead you can interpolate them
+    # and pad with zeros
     st = Stream(traces=[tr for tr in st if tr.stats.npts * tr.stats.delta == 86400])
 
     if not st:
@@ -189,8 +191,9 @@ def plot_data(date_of_interest, stas, channels, network, base_dir):
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
     plt.grid(True)
     plt.ylim(0, len(stas) * len(channels) * nb + 10)
-    plt.savefig(os.path.join(base_dir, 'plots', f'data_plot_{start_date}.png'))
-    plt.close()
+    #plt.savefig(os.path.join(base_dir, 'plots', f'data_plot_{start_date}.png'))
+    #plt.close()
+    return None
 
 def plot_locations(locs, base_dir, events=None):
     """
