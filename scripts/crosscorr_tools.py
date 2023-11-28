@@ -53,7 +53,7 @@ def get_traces(pairs, date_of_interest, base_dir):
         except FileNotFoundError:
             print(f"File {file} not found.")
 
-def process_data(st, sampling_rate, freqmin, freqmax):
+def process_data(st, sampling_rate, freqmin, freqmax,startdate, enddate):
     """
     Preprocess seismic data.
 
@@ -67,13 +67,15 @@ def process_data(st, sampling_rate, freqmin, freqmax):
         st (obspy.core.Stream): Seismic data streams.
     """
     # Initialize start and end with values that will be updated
-    starttime = min(tr.stats.starttime for tr in st)
-    endtime = max(tr.stats.endtime for tr in st)
+    starttime = UTCDateTime(startdate)
+    endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     for tr in st:
         tr.trim(starttime=starttime, endtime=endtime, pad=1, fill_value=0)
-        tr.interpolate(sampling_rate=sampling_rate, starttime=starttime)
+        if tr.stats.sampling_rate != sampling_rate:
+            tr.interpolate(sampling_rate=sampling_rate, starttime=starttime)
+        # TODO: try with and without this and see if there is a difference?
         # tr.detrend(type='simple')
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
 
