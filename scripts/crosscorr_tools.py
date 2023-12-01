@@ -54,7 +54,7 @@ def get_traces(pairs, date_of_interest, base_dir):
         except FileNotFoundError:
             print(f"File {file} not found.")
 
-def process_data(st, sampling_rate, freqmin, freqmax):
+def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     """
     Preprocess seismic data.
 
@@ -68,10 +68,10 @@ def process_data(st, sampling_rate, freqmin, freqmax):
         st (obspy.core.Stream): Seismic data streams.
     """
     # Initialize start and end with values that will be updated
-    starttime = min(tr.stats.starttime for tr in st)
-    endtime = max(tr.stats.endtime for tr in st)
-    # starttime = UTCDateTime(startdate)
-    # endtime = UTCDateTime(enddate)
+    # starttime = min(tr.stats.starttime for tr in st)
+    # endtime = max(tr.stats.endtime for tr in st)
+    starttime = UTCDateTime(startdate)
+    endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     for tr in st:

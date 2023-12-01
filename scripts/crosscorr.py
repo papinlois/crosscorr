@@ -53,11 +53,16 @@ startscript = time.time()
 stas = ['LZB','SNB','PGC','NLLB']
 channels = ['BHN','BHE','BHZ']
 pairs = [f"{sta}..{cha}" for sta in stas for cha in channels]
+# #test
+# stas=['YOUB','PFB']
+# channels=['HHN','HHE','HHZ']
+# pairs2=[f"{sta}..{cha}" for sta in stas for cha in channels]
+# pairs.extend(pairs2)
 network = 'CN'
 
 # Hour and date of interest
 # TODO: How does this work for multi day cross correlations? (look into ppsd code)
-date_of_interest = "20100517"
+date_of_interest = "20100516"
 startdate=datetime.strptime(date_of_interest, "%Y%m%d")
 enddate=startdate+timedelta(days=1)
 
@@ -72,7 +77,7 @@ folder = f"{network} {date_of_interest}"
 
 # Get the streams and preprocess
 st = Stream(traces=crosscorr_tools.get_traces(pairs, date_of_interest, base_dir))
-st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax)
+st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate)
 
 # Plot all the streams
 data_plot_filename = os.path.join(
@@ -120,9 +125,9 @@ for idx, template_stats in templates.iterrows():
         # Template data
         start_templ = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
         end_templ = start_templ + timedelta(seconds=win_size)
-        if end_templ.day != startdate.day:
-            print('Last template has an ending time on the next day : not processed.')
-            break
+        # if end_templ.day != startdate.day:
+            # print('Last template has an ending time on the next day : not processed.')
+            # break
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
         all_template.append(template)
         # FIXME: For NLLB where values of 0 exist, a Warning appears for
@@ -188,7 +193,7 @@ for idx, template_stats in templates.iterrows():
 
             ## Writing in output.txt
             # Create UTCDateTime objects from the newevent values
-            newevent = np.delete(newdect, max_index)*tr[0].stats.delta
+            newevent = np.delete(newdect, max_index)*tr.stats.delta
             # FIXME: Doesn't take the primary event in the template in utc_times
             # which is the time of every detections for 1 template
             utc_times = [tr.stats.starttime.datetime +
