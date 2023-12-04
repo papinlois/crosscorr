@@ -26,33 +26,51 @@ As of 12/1/23.
 
 import os
 import numpy as np
+from datetime import datetime
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from obspy.core import read
 
-def get_traces(pairs, date_of_interest, base_dir):
+def get_traces(network_config, date_of_interest, base_dir):
     """
     Retrieve seismic traces for specified stations and channels on a given date.
-
+    
     Parameters:
-        stas (list): List of station names.
-        channels (list): List of channel names.
+        network_config (dict): A dictionary containing configuration details for each network.
         date_of_interest (str): The date in the format 'YYYYMMDD'
         base_dir (str): The base directory for file paths.
-
+        
     Returns:
         - list: List of ObsPy Trace objects containing the seismic data.
-
+        
     Note:
-    - The function yields a Trace object for each station and channel combination.
+        - The function yields a Trace object for each station and channel combination.
     """
     path = os.path.join(base_dir, 'data', 'seed')
-    for pair in pairs:
-        file = os.path.join(path, f"{date_of_interest}.CN.{pair}.mseed")
-        try:
-            yield read(file)[0]
-        except FileNotFoundError:
-            print(f"File {file} not found.")
+
+    for network, config in network_config.items():
+        stations = config['stations']
+        channels = config['channels']
+        filename_pattern = config['filename_pattern']
+        for sta in stations:
+            if network == 'PB':
+                dt = datetime.strptime(date_of_interest, '%Y%m%d')
+                julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
+                file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
+                print(file)
+                try:
+                    for i in range(3):
+                        yield read(file)[i]
+                except FileNotFoundError:
+                    print(f"File {file} not found.")
+            else:
+                for cha in channels:
+                    file = os.path.join(path, filename_pattern.format(date=date_of_interest, station=sta, channel=cha))
+                    print(file)
+                    try:
+                        yield read(file)[0]
+                    except FileNotFoundError:
+                        print(f"File {file} not found.")
 
 def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     """
@@ -71,15 +89,29 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     # starttime = min(tr.stats.starttime for tr in st)
     # endtime = max(tr.stats.endtime for tr in st)
     starttime = UTCDateTime(startdate)
-    endtime = UTCDateTime(enddate)
+    endtime = UTCDateTime(enddate)-600
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
+    # TODO: Trouble with the process when adding the PB network, the trim doesn't
+    # work on PB at all = doesn't stream the say way
+    # CN : got to endtime ; PB : take away the difference between starttime and endtime
+    # Also : need to add a merge if same id
     for tr in st:
-        tr.trim(starttime=starttime, endtime=endtime, pad=1, fill_value=0)
-        if tr.stats.sampling_rate != sampling_rate:
-            tr.interpolate(sampling_rate=sampling_rate, starttime=starttime)
+        tr.trim(starttime=starttime, endtime=endtime, pad=1, 
+                fill_value=0, nearest_sample=False)
+        if tr.stats.sampling_rate != 100.0:
+            tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
-
+        tr.interpolate(sampling_rate=sampling_rate)
+        
+    # # Check if end times are still different after trimming
+    # updated_endtime = min(tr.stats.endtime for tr in st)
+    # if updated_endtime < endtime:
+    #     print("End times are different. Trimming again at the smaller time.")
+    #     for tr in st:
+    #         tr.trim(starttime=starttime, endtime=updated_endtime, pad=1, 
+    #                 fill_value=0, nearest_sample=False)
+    
     return st
 
 def plot_data(st, stas, channels, data_plot_filename):
@@ -90,40 +122,49 @@ def plot_data(st, stas, channels, data_plot_filename):
         st (obspy.core.Stream): Seismic data streams.
         stas (list): List of station names.
         channels (list): List of channel names.
-        base_dir (str): The base directory for file paths.
         data_plot_filename (str): Filename for saving the plot.
 
     Returns:
         None
     """
-    plt.figure(figsize=(15, 7))
-    nb = 15 # Distance between plots
-    offset = len(stas) * len(channels) * nb
+    # Generate pairs based on stas and channels
+    pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels) 
+             for sta in sta_list for cha in cha_list]
+
+    plt.figure(figsize=(18, 10))
+    nb = 20  # Distance between plots
+    offset = len(pairs) * nb
 
     # Get the start date from the first trace in the stream
     start_date = st[0].stats.starttime.strftime("%Y%m%d")
 
-    # Plot the data
-    for sta_idx, sta in enumerate(stas):
-        for cha_idx, cha in enumerate(channels):
-            # Calculate color shade
-            shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
-            color = (0, 0.2, 0.5 + shade / 2)
-            tr = st[sta_idx * len(channels) + cha_idx]
-            time_in_seconds = np.arange(len(tr.data)) * tr.stats.delta
-            norm = np.median(3 * np.abs(tr.data))
-            plt.plot(time_in_seconds, tr.data / norm + offset,
-                      color=color, label=f"{sta}..{cha}")
-            offset -= nb
+    # Plot the data based on the order specified in pairs
+    for pair in pairs:
+        sta, cha = pair.split('..')
+        sta_idx = stas.index([s for s in stas if sta in s][0])
+        cha_idx = channels[sta_idx].index(cha)
+        
+        # Calculate color shade
+        shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
+        color = (0, 0.2, 0.5 + shade / 2)
+        tr = st[sta_idx * len(channels) + cha_idx]
+        time_in_seconds = np.arange(len(tr.data)) * tr.stats.delta
+        norm = np.median(3 * np.abs(tr.data))
+        plt.plot(time_in_seconds, tr.data / norm + offset,
+                 color=color, label=f"{sta}..{cha}")
+        offset -= nb
+
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Full day of {start_date}', fontsize=16)
     plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
     plt.grid(True)
     plt.xlim(0, max(time_in_seconds))
-    plt.ylim(0, len(stas) * len(channels) * nb + 10)
+    plt.ylim(0, len(pairs) * nb + 10)
     plt.savefig(data_plot_filename)
     plt.close()
+    
+    return pairs
 
 def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
                    crosscorr_combination, date_of_interest, crosscorr_plot_filename):

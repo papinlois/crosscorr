@@ -48,17 +48,24 @@ locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
 # Start timer
 startscript = time.time()
 
-# List of stations/channels to analyze : CN network
-# TODO: How does this work with other stations (HH) and network (PB)?
-stas = ['LZB','SNB','PGC','NLLB']
-channels = ['BHN','BHE','BHZ']
-pairs = [f"{sta}..{cha}" for sta in stas for cha in channels]
-# #test
-# stas=['YOUB','PFB']
-# channels=['HHN','HHE','HHZ']
-# pairs2=[f"{sta}..{cha}" for sta in stas for cha in channels]
-# pairs.extend(pairs2)
-network = 'CN'
+# Define the network configurations (CN & PB)
+network_config = {
+    'CN1': {
+        'stations': ['LZB', 'SNB', 'PGC'],
+        'channels': ['BHN', 'BHE', 'BHZ'],
+        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    },
+    'CN2': {
+        'stations': ['YOUB', 'PFB'],
+        'channels': ['HHN', 'HHE', 'HHZ'],
+        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    },
+    'PB': {
+        'stations': ['B001', 'B009', 'B010', 'B011', 'B926'],
+        'channels': ['EH1', 'EH2', 'EHZ'],
+        'filename_pattern': '{station}.PB.{year}.{julian_day}'
+    }
+}
 
 # Hour and date of interest
 # TODO: How does this work for multi day cross correlations? (look into ppsd code)
@@ -72,19 +79,23 @@ freqmax = 8.0
 sampling_rate = 40.0
 win_size = 30
 
-# To create beforehand
-folder = f"{network} {date_of_interest}"
-
 # Get the streams and preprocess
-st = Stream(traces=crosscorr_tools.get_traces(pairs, date_of_interest, base_dir))
+st = Stream(traces=crosscorr_tools.get_traces(network_config, date_of_interest, base_dir))
 st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate)
+
+# List of stations/channels to analyze
+stas = [network_config[key]['stations'] for key in network_config]
+channels = [network_config[key]['channels'] for key in network_config]
+
+# To create beforehand
+folder = f"{date_of_interest}"
 
 # Plot all the streams
 data_plot_filename = os.path.join(
     base_dir,
     f'plots/{folder}/data_plot_{date_of_interest}.png'
 )
-crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
+pairs = crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
 
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -100,7 +111,7 @@ templates.index.name = 'Index'
 
 # Plot locations of events and stations
 events = templates[['lon', 'lat', 'depth', 'datetime']]
-crosscorr_tools.plot_locations(locs, base_dir, events=events)
+# crosscorr_tools.plot_locations(locs, base_dir, events=events)
 
 # Collect information
 info_lines = []  # Store lines of information
@@ -110,14 +121,14 @@ num_detections = 0
 info_file_path = os.path.join(base_dir, 'plots', f"{folder}", "info.txt")
 output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
-# templates=templates[5:]
+templates=templates[42:43]
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
     # Initialization
     template=[]
     all_template=[]
     templ_idx=idx
-    crosscorr_combination = f'templ{idx}_net{network}'
+    crosscorr_combination = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
 
     # Iterate over all stations and channels combination
@@ -125,9 +136,9 @@ for idx, template_stats in templates.iterrows():
         # Template data
         start_templ = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
         end_templ = start_templ + timedelta(seconds=win_size)
-        # if end_templ.day != startdate.day:
-            # print('Last template has an ending time on the next day : not processed.')
-            # break
+        if end_templ.day != startdate.day:
+            print('Last template has an ending time on the next day : not processed.')
+            break
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
         all_template.append(template)
         # FIXME: For NLLB where values of 0 exist, a Warning appears for
@@ -208,11 +219,11 @@ for idx, template_stats in templates.iterrows():
             #  Write the newevent and additional columns to the output file
             with open(output_file_path, "a", encoding=("utf-8")) as output_file:
                 if os.stat(output_file_path).st_size == 0:
-                    output_file.write("starttime,templ,network,crosscorr value\n")
+                    output_file.write("starttime,templ,crosscorr value\n")
                 for i, utc_time in enumerate(utc_times):
                     output_file.write(
                         f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
-                        f"{templ_idx},{network},{cc_values[i]:.4f}\n"
+                        f"{templ_idx},{cc_values[i]:.4f}\n"
                     )
 
     # Follow the advancement
@@ -223,12 +234,11 @@ end_script = time.time()
 script_execution_time = end_script - startscript
 print(f"Script execution time: {script_execution_time:.2f} seconds")
 # Get the list of stations and channels used
-stas_used = ", ".join(stas)
-channels_used = ", ".join(channels)
+pairs_used = ", ".join(pairs)
 # Write the info of the run in the output file
 with open(info_file_path, 'w', encoding='utf-8') as file:
     file.write(f"Date Range: {startdate} - {enddate}\n\n")
-    file.write(f"Stations and Channel Used: {stas_used} --- {channels_used}\n\n")
+    file.write(f"Stations and Channels Used: {pairs_used}\n\n")
     file.write(f"Frequency range: {freqmin}-{freqmax} Hz\n")
     file.write(f"Sampling rate: {sampling_rate} Hz\n\n")
     file.write(f"Total of detections: {num_detections} \n")
