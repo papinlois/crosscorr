@@ -29,14 +29,13 @@ import time
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
-import matplotlib
 from obspy import UTCDateTime
 from obspy.core import Stream
 import autocorr_tools
 import crosscorr_tools
 
-matplotlib.use('Agg') # Must fix the memory issue on Spyder
-# matplotlib.use('TkAgg') # Interactively
+import matplotlib
+matplotlib.use('Agg')
 
 # Define the base directory
 base_dir = "C:/Users/papin/Desktop/phd/"
@@ -49,9 +48,10 @@ locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
 startscript = time.time()
 
 # Define the network configurations (CN & PB)
+# NLLB removed, careful for some of the B stations 
 network_config = {
     'CN1': {
-        'stations': ['LZB', 'SNB', 'PGC'],
+        'stations': ['LZB', 'PGC', 'SNB'],
         'channels': ['BHN', 'BHE', 'BHZ'],
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
@@ -61,7 +61,7 @@ network_config = {
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
     'PB': {
-        'stations': ['B001', 'B009', 'B010', 'B011', 'B926'],
+        'stations': ['B001', 'B009', 'B010', 'B011'],
         'channels': ['EH1', 'EH2', 'EHZ'],
         'filename_pattern': '{station}.PB.{year}.{julian_day}'
     }
@@ -90,7 +90,7 @@ channels = [network_config[key]['channels'] for key in network_config]
 # To create beforehand
 folder = f"{date_of_interest}"
 
-# Plot all the streams
+# Plot all the streams and get all the combination of sta/cha
 data_plot_filename = os.path.join(
     base_dir,
     f'plots/{folder}/data_plot_{date_of_interest}.png'
@@ -121,7 +121,10 @@ num_detections = 0
 info_file_path = os.path.join(base_dir, 'plots', f"{folder}", "info.txt")
 output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
-templates=templates[42:43]
+# To look at 1 template
+templ_no=52
+templates=templates[templ_no:templ_no+1]
+
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
     # Initialization
@@ -148,6 +151,9 @@ for idx, template_stats in templates.iterrows():
             tr.data, template.data,
             mode='valid', normalize='full', demean=True, method='auto'
         )
+
+        if len(xcorr_template)<len(xcorr_full):
+            xcorr_full=xcorr_full[:len(xcorr_template)]
         xcorr_full+=xcorr_template
 
     # Network cross-correlation
@@ -156,6 +162,7 @@ for idx, template_stats in templates.iterrows():
     # Plot template for all pairs
     if template==[]:
         break
+    
     template_plot_filename = os.path.join(
         base_dir,
         f'plots/{folder}/{crosscorr_combination}_template_'

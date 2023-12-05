@@ -89,7 +89,7 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     # starttime = min(tr.stats.starttime for tr in st)
     # endtime = max(tr.stats.endtime for tr in st)
     starttime = UTCDateTime(startdate)
-    endtime = UTCDateTime(enddate)-600
+    endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     # TODO: Trouble with the process when adding the PB network, the trim doesn't
@@ -131,8 +131,8 @@ def plot_data(st, stas, channels, data_plot_filename):
     pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels) 
              for sta in sta_list for cha in cha_list]
 
-    plt.figure(figsize=(18, 10))
-    nb = 20  # Distance between plots
+    plt.figure(figsize=(16, 8))
+    nb = 10  # Distance between plots
     offset = len(pairs) * nb
 
     # Get the start date from the first trace in the stream
@@ -143,15 +143,10 @@ def plot_data(st, stas, channels, data_plot_filename):
         sta, cha = pair.split('..')
         sta_idx = stas.index([s for s in stas if sta in s][0])
         cha_idx = channels[sta_idx].index(cha)
-        
-        # Calculate color shade
-        shade = (sta_idx * len(channels) + cha_idx) / (len(stas) * len(channels))
-        color = (0, 0.2, 0.5 + shade / 2)
         tr = st[sta_idx * len(channels) + cha_idx]
         time_in_seconds = np.arange(len(tr.data)) * tr.stats.delta
         norm = np.median(3 * np.abs(tr.data))
-        plt.plot(time_in_seconds, tr.data / norm + offset,
-                 color=color, label=f"{sta}..{cha}")
+        plt.plot(time_in_seconds, tr.data / norm + offset, label=f"{sta}..{cha}")
         offset -= nb
 
     plt.xlabel('Time (s)', fontsize=14)
@@ -161,6 +156,7 @@ def plot_data(st, stas, channels, data_plot_filename):
     plt.grid(True)
     plt.xlim(0, max(time_in_seconds))
     plt.ylim(0, len(pairs) * nb + 10)
+    plt.tight_layout()
     plt.savefig(data_plot_filename)
     plt.close()
     
@@ -198,6 +194,7 @@ def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
     ax.set_xlim(0, stream_duration)
     ax.set_title(f'{crosscorr_combination}_{date_of_interest}', fontsize=16)
     plt.gcf().subplots_adjust(bottom=0.2)
+    plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
     plt.close()
 
@@ -214,7 +211,7 @@ def plot_template(all_template, pairs, templ_idx, template_plot_filename):
     Returns:
         None
     """
-    plt.figure(figsize=(15, 7))
+    plt.figure(figsize=(12,6))
     nb = 2  # Distance between plots
     offset = len(all_template) * nb
 
@@ -227,7 +224,9 @@ def plot_template(all_template, pairs, templ_idx, template_plot_filename):
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'All Templates for Template {templ_idx}', fontsize=16)
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    # plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.xlim(0, max(template.times()))
+    plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(template_plot_filename)
@@ -255,10 +254,11 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
             stacked_traces[idx, :] += tr.data[dect:dect + len(template)] / max_abs_value
     stacked_traces /= len(newdect)
 
-    plt.figure(figsize=(15, 7))
+    plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, len(template) / 40, len(stacked_traces[0, :]), endpoint=False)
+    x = np.linspace(0, len(template) / st[0].stats.sampling_rate, 
+                    len(stacked_traces[0, :]), endpoint=False)
     for i in range(len(stacked_traces)):
         plt.plot(x, stacked_traces[i, :] + offset, label=f'{pairs[i]}')
         offset -= nb
@@ -266,7 +266,9 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx}', fontsize=16)
-    plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    # plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.xlim(0, max(x))
+    plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(stack_plot_filename)
