@@ -57,7 +57,7 @@ def get_traces(network_config, date_of_interest, base_dir):
                 dt = datetime.strptime(date_of_interest, '%Y%m%d')
                 julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
                 file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
-                print(file)
+                # print(file)
                 try:
                     for i in range(3):
                         yield read(file)[i]
@@ -66,7 +66,7 @@ def get_traces(network_config, date_of_interest, base_dir):
             else:
                 for cha in channels:
                     file = os.path.join(path, filename_pattern.format(date=date_of_interest, station=sta, channel=cha))
-                    print(file)
+                    # print(file)
                     try:
                         yield read(file)[0]
                     except FileNotFoundError:
@@ -86,16 +86,10 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
         st (obspy.core.Stream): Seismic data streams.
     """
     # Initialize start and end with values that will be updated
-    # starttime = min(tr.stats.starttime for tr in st)
-    # endtime = max(tr.stats.endtime for tr in st)
     starttime = UTCDateTime(startdate)
     endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
-    # TODO: Trouble with the process when adding the PB network, the trim doesn't
-    # work on PB at all = doesn't stream the say way
-    # CN : got to endtime ; PB : take away the difference between starttime and endtime
-    # Also : need to add a merge if same id
     for tr in st:
         tr.trim(starttime=starttime, endtime=endtime, pad=1, 
                 fill_value=0, nearest_sample=False)
@@ -104,14 +98,6 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
         tr.interpolate(sampling_rate=sampling_rate)
         
-    # # Check if end times are still different after trimming
-    # updated_endtime = min(tr.stats.endtime for tr in st)
-    # if updated_endtime < endtime:
-    #     print("End times are different. Trimming again at the smaller time.")
-    #     for tr in st:
-    #         tr.trim(starttime=starttime, endtime=updated_endtime, pad=1, 
-    #                 fill_value=0, nearest_sample=False)
-    
     return st
 
 def plot_data(st, stas, channels, data_plot_filename):
@@ -345,3 +331,4 @@ def get_traces_PB(stas, channels, startdate, network, base_dir): #update needed
         except FileNotFoundError:
             print(f"File {file} not found.")
 '''
+
