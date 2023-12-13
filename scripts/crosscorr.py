@@ -21,10 +21,10 @@ Description (not specifically in order):
 10. Outputs the new detected events times to a text file.
 11. Stack and plot all detected events of each template.
 
-Note: This code is made for cross-correlation for a day of continuous data. If 
-you want to do more on several days, please use crosscorr_days.
+Note: This code is made for cross-correlation for several days of continuous 
+data. If you want a day, you still have to enter 2 dates of interests.
 
-As of 11/8/23.
+As of 12/13/23.
 """
 
 import os
@@ -71,9 +71,9 @@ network_config = {
 }
 
 # Days of data
-date_of_interest = "20100517"
-startdate=datetime.strptime(date_of_interest, "%Y%m%d")
-enddate=startdate+timedelta(days=1)
+date_of_interests = ["20100516","20100517","20100518","20100519","20100520"]
+startdate=datetime.strptime(date_of_interests[0], "%Y%m%d")
+enddate=startdate+timedelta(days=len(date_of_interests) - 1)
 
 # Frequency range, sampling_rate, and time window
 freqmin = 2.0
@@ -81,8 +81,12 @@ freqmax = 8.0
 sampling_rate = 40.0
 win_size = 30
 
-# Get the streams and preprocess
-st = Stream(traces=crosscorr_tools.get_traces(network_config, date_of_interest, base_dir))
+# Get the streams and preprocess ###actualize the get_traces fct
+st=Stream()
+for date_of_interest in date_of_interests:
+    st += Stream(traces=crosscorr_tools.get_traces(network_config, date_of_interest, base_dir))
+st._trim_common_channels()
+st._cleanup()
 st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate)
 
 # List of stations/channels to analyze
@@ -90,7 +94,7 @@ stas = [network_config[key]['stations'] for key in network_config]
 channels = [network_config[key]['channels'] for key in network_config]
 
 # To create beforehand
-folder = f"{date_of_interest}"
+folder = f"{date_of_interest} {len(date_of_interests)}days" #Last day of the series
 
 # Plot all the streams and get all the combination of sta/cha
 data_plot_filename = os.path.join(
@@ -98,6 +102,9 @@ data_plot_filename = os.path.join(
     f'plots/{folder}/data_plot_{date_of_interest}.png'
 )
 pairs = crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
+# If no plot :
+pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels) 
+          for sta in sta_list for cha in cha_list]
 
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -123,8 +130,9 @@ info_file_path = os.path.join(base_dir, 'plots', f"{folder}", "info.txt")
 output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # You can choose which templates
-templ_no=265
-templates=templates[templ_no:]
+templ_no=109
+templates=templates[templ_no:templ_no+1]
+# templates=templates.iloc[::5]
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -140,8 +148,8 @@ for idx, template_stats in templates.iterrows():
         # Template data
         start_templ = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
         end_templ = start_templ + timedelta(seconds=win_size)
-        if end_templ.day != startdate.day:
-            print('Last template has an ending time on the next day : not processed.')
+        if end_templ.day != enddate.day:
+            print('Last template has an ending time on a wrong day: not processed.')
             break
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
         all_template.append(template)
@@ -149,9 +157,8 @@ for idx, template_stats in templates.iterrows():
             tr.data, template.data,
             mode='valid', normalize='full', demean=True, method='auto'
         )
-        
         # process_data gives a difference of 1 sample between some streams so 
-        # it just cuts the streams at the same length 
+        # it cuts the streams at the same length 
         if len(xcorr_template)<len(xcorr_full):
             xcorr_full=xcorr_full[:len(xcorr_template)]
         xcorr_full+=xcorr_template
