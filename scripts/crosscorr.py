@@ -121,7 +121,7 @@ templates = templates.drop(columns=['dates', 'N', 'residual','starttime'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
-templates=templates.iloc[::10]#[42:42+1]
+templates=templates[120:120+1]#.iloc[::10]
 
 # Plot locations of events and stations
 events = templates[['lon', 'lat', 'depth', 'datetime']]
@@ -209,7 +209,7 @@ for idx, template_stats in templates.iterrows():
             stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                                   folder, name, 'stack1', lastday)
             crosscorr_tools.plot_stacks(st, template, newdect, pairs,
-                                        templ_idx, stack_plot_filename)
+                                        templ_idx, stack_plot_filename, cpt=1)
 
             ## Writing in output.txt
             # Create UTCDateTime objects from the newevent values
@@ -268,7 +268,7 @@ for idx, template_stats in templates.iterrows():
                     xcorrmean=xcorr_full/len(st)
 
                     # Plot stacked template on each station-channel combination
-                    # TODO: it may have no need to plot again the templates since it's the previous plot_stack
+                    # TODO: no need to plot again the templates since it's the previous plot_stack?
                     template_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'template{cpt}', lastday)
                     crosscorr_tools.plot_template(st, all_template, pairs,
                                                   templ_idx, template_plot_filename)
@@ -298,7 +298,7 @@ for idx, template_stats in templates.iterrows():
                             # Plot stacked traces for new detections
                             stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
                             crosscorr_tools.plot_stacks(st, template, newdect, pairs,
-                                                        templ_idx, stack_plot_filename)
+                                                        templ_idx, stack_plot_filename, cpt=cpt)
 
                             ## Writing in output.txt
                             # Create UTCDateTime objects from the newevent values

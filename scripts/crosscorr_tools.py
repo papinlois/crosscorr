@@ -233,7 +233,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'All Templates for Template {templ_idx}', fontsize=16)
-    # plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.yticks(np.arange(len(pairs)) * nb, pairs[::-1], fontsize=12)
     plt.xlim(0, max(x))
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
@@ -241,7 +241,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.savefig(template_plot_filename)
     plt.close()
 
-def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
+def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
     Plot the combined traces for a detection and its corresponding template.
 
@@ -277,8 +277,8 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
 
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
-    plt.title(f'Stacked Traces for Template {templ_idx}', fontsize=16)
-    # plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
+    plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt}', fontsize=16)
+    plt.yticks(np.arange(len(pairs)) * nb, pairs[::-1], fontsize=12)
     plt.xlim(0, max(x))
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
