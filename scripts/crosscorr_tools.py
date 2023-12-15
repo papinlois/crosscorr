@@ -165,7 +165,7 @@ def plot_data(st, stas, channels, data_plot_filename):
     plt.ylim(0, len(pairs) * nb + 10)
     plt.tight_layout()
     plt.savefig(data_plot_filename)
-    # plt.close()
+    plt.close()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
                    name, lastday, crosscorr_plot_filename):
@@ -202,7 +202,7 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    # plt.close()
+    plt.close()
 
 def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
@@ -239,7 +239,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(template_plot_filename)
-    # plt.close()
+    plt.close()
 
 def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     """
@@ -284,7 +284,7 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(stack_plot_filename)
-    # plt.close()
+    plt.close()
 
 def plot_locations(locs, base_dir, events=None):
     """
@@ -326,4 +326,4 @@ def plot_locations(locs, base_dir, events=None):
     plt.ylabel('Latitude')
     plt.title(f'Station and Events Locations on {date}')
     plt.savefig(os.path.join(base_dir, 'plots', f'station_events_locations_{date}.png'))
-    # plt.close()
+    plt.close()

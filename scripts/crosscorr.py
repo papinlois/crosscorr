@@ -108,7 +108,7 @@ data_plot_filename = os.path.join(
     base_dir,
     f'plots/{folder}/data_plot_{lastday}.png'
 )
-crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
+# crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
 
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -117,7 +117,7 @@ templates['datetime']=pd.to_datetime(templates['OT'])
 templates = templates[(templates['datetime'] >= st[0].stats.starttime.datetime)
                     & (templates['datetime'] < st[0].stats.endtime.datetime)
                     & (templates['residual'] < 0.1)]
-templates = templates.drop(columns=['dates', 'N', 'resisual','starttime'])
+templates = templates.drop(columns=['dates', 'N', 'residual','starttime'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
@@ -232,7 +232,7 @@ for idx, template_stats in templates.iterrows():
                     )
 
             # Reuse detected events as templates by stacking
-            print("Got detections so let's reuse them as templates by staking them!")
+            print("Got detections so let's reuse them as templates by stacking them!")
             print(len(utc_times))
             cpt=1
             for _ in range(num_repeats):
@@ -268,6 +268,7 @@ for idx, template_stats in templates.iterrows():
                     xcorrmean=xcorr_full/len(st)
 
                     # Plot stacked template on each station-channel combination
+                    # TODO: it may have no need to plot again the templates since it's the previous plot_stack
                     template_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'template{cpt}', lastday)
                     crosscorr_tools.plot_template(st, all_template, pairs,
                                                   templ_idx, template_plot_filename)
