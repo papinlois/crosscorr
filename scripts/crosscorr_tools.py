@@ -7,6 +7,7 @@ The functions cover loading and preprocessing data, plotting seismic traces, cre
 summed traces around detected events, and more.
 
 Functions:
+- build_file_path: Gives file names for plots.
 - get_traces: Load seismic data for specified stations, channels, and date.
 - process_data: Preprocess seismic data, including interpolation, trimming,
   detrending, and filtering.
@@ -21,7 +22,7 @@ Functions:
 
 @author: papin
 
-As of 12/1/23.
+As of 12/15/23.
 """
 
 import os
@@ -29,48 +30,68 @@ import numpy as np
 from datetime import datetime
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
-from obspy.core import read
+from obspy.core import read, Stream
 
-def get_traces(network_config, date_of_interest, base_dir):
+def build_file_path(base_dir, folder, name, prefix, lastday):
     """
-    Retrieve seismic traces for specified stations and channels on a given date.
-    
+    Build a file path for saving plots (related to plot_template, plot_stacks,
+    plot_crosscorr in crosscorr_tools module).
+
+    Parameters:
+        base_dir (str): The base directory where the file will be saved.
+        folder (str): The subfolder within the base directory for organization.
+        name (str): The base name of the file (usually number of the template).
+        prefix (str): A prefix to be included in the file name.
+        lastday (str): The last day identifier to be included in the file name.
+    """
+    return os.path.join(base_dir, f'plots/{folder}/{name}_{prefix}_{lastday}.png')
+
+def get_traces(network_config, date_of_interests, base_dir):
+    """
+    Retrieve seismic traces for specified stations and channels on a given dates.
+
     Parameters:
         network_config (dict): A dictionary containing configuration details for each network.
-        date_of_interest (str): The date in the format 'YYYYMMDD'
+        date_of_interests (str): The dates in the format 'YYYYMMDD'
         base_dir (str): The base directory for file paths.
-        
+
     Returns:
-        - list: List of ObsPy Trace objects containing the seismic data.
-        
-    Note:
-        - The function yields a Trace object for each station and channel combination.
+        st (obspy.core.Stream): Seismic data streams.
     """
     path = os.path.join(base_dir, 'data', 'seed')
 
-    for network, config in network_config.items():
-        stations = config['stations']
-        channels = config['channels']
-        filename_pattern = config['filename_pattern']
-        for sta in stations:
-            if network == 'PB':
-                dt = datetime.strptime(date_of_interest, '%Y%m%d')
-                julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
-                file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
-                # print(file)
-                try:
-                    for i in range(3):
-                        yield read(file)[i]
-                except FileNotFoundError:
-                    print(f"File {file} not found.")
-            else:
-                for cha in channels:
-                    file = os.path.join(path, filename_pattern.format(date=date_of_interest, station=sta, channel=cha))
-                    # print(file)
+    st = Stream()
+
+    for date in date_of_interests:
+        for network, config in network_config.items():
+            stations = config['stations']
+            channels = config['channels']
+            filename_pattern = config['filename_pattern']
+            for sta in stations:
+                if network == 'PB':
+                    dt = datetime.strptime(date, '%Y%m%d')
+                    julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
+                    file = os.path.join(path, 
+                                        filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
                     try:
-                        yield read(file)[0]
+                        for i in range(3):
+                            st += read(file)[i]
                     except FileNotFoundError:
                         print(f"File {file} not found.")
+                else:
+                    for cha in channels:
+                        file = os.path.join(path, 
+                                            filename_pattern.format(date=date, station=sta, channel=cha))
+                        try:
+                            st += read(file)[0]
+                        except FileNotFoundError:
+                            print(f"File {file} not found.")
+
+    # Merge all data by stations and channels
+    st._trim_common_channels()
+    st._cleanup()
+
+    return st
 
 def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     """
@@ -91,13 +112,13 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     for tr in st:
-        tr.trim(starttime=starttime, endtime=endtime, pad=1, 
+        tr.trim(starttime=starttime, endtime=endtime, pad=1,
                 fill_value=0, nearest_sample=False)
         if tr.stats.sampling_rate != 100.0:
             tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
         tr.interpolate(sampling_rate=sampling_rate)
-        
+
     return st
 
 def plot_data(st, stas, channels, data_plot_filename):
@@ -114,7 +135,7 @@ def plot_data(st, stas, channels, data_plot_filename):
         None
     """
     # Generate pairs based on stas and channels
-    pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels) 
+    pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels)
              for sta in sta_list for cha in cha_list]
 
     plt.figure(figsize=(16, 8))
@@ -144,12 +165,10 @@ def plot_data(st, stas, channels, data_plot_filename):
     plt.ylim(0, len(pairs) * nb + 10)
     plt.tight_layout()
     plt.savefig(data_plot_filename)
-    plt.close()
-    
-    return pairs
+    # plt.close()
 
 def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
-                   crosscorr_combination, date_of_interest, crosscorr_plot_filename):
+                   name, lastday, crosscorr_plot_filename):
     """
     Plots cross-correlation data and saves the plot to a file.
 
@@ -159,8 +178,8 @@ def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
         thresh (float): Threshold for the new detections.
         newdect (numpy.ndarray): Indices of the detected events.
         max_index (int): Index of the maximum value in the cross-correlation.
-        crosscorr_combination (str): Combination identifier for the plot title.
-        date_of_interest (str): Date identifier for the plot title.
+        name (str): Combination identifier for the plot title.
+        lastday (str): Date identifier for the plot title.
         crosscorr_plot_filename (str): Path to save the plot.
 
     Returns:
@@ -178,17 +197,18 @@ def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
     ax.set_xlabel('Time (s)', fontsize=14)
     ax.set_ylabel('Correlation Coefficient', fontsize=14)
     ax.set_xlim(0, stream_duration)
-    ax.set_title(f'{crosscorr_combination}_{date_of_interest}', fontsize=16)
+    ax.set_title(f'{name}_{lastday}', fontsize=16)
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    plt.close()
+    # plt.close()
 
-def plot_template(all_template, pairs, templ_idx, template_plot_filename):
+def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
     Plot templates with an offset on the y-axis.
 
     Parameters:
+        st (obspy.core.Stream): Seismic data streams.
         all_template (list): List of template traces.
         pairs (list): List of pairs corresponding to each template in all_template.
         templ_idx (int): Index of the template.
@@ -198,25 +218,27 @@ def plot_template(all_template, pairs, templ_idx, template_plot_filename):
         None
     """
     plt.figure(figsize=(12,6))
-    nb = 2  # Distance between plots
+    nb = 1  # Distance between plots
     offset = len(all_template) * nb
-
+    x = np.linspace(0, len(all_template[0]) / st[0].stats.sampling_rate,
+                    len(all_template[0]), endpoint=False)
+    print(x)
     # Plot each template with an offset on the y-axis
     for _, (template, pair) in enumerate(zip(all_template, pairs)):
         norm = np.max(np.abs(template.data))
-        plt.plot(template.times(), (template.data / norm + offset), label=f'{pair}')
+        plt.plot(x, template / norm + offset, label=f'{pair}')
         offset -= nb
 
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'All Templates for Template {templ_idx}', fontsize=16)
     # plt.legend(loc='upper left', bbox_to_anchor=(1, 1), fontsize=12)
-    plt.xlim(0, max(template.times()))
+    plt.xlim(0, max(x))
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(template_plot_filename)
-    plt.close()
+    # plt.close()
 
 def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     """
@@ -236,17 +258,20 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     stacked_traces = np.zeros((len(st), len(template)))
     for idx, tr in enumerate(st):
         for dect in newdect:
-            max_abs_value = np.max(np.abs(tr.data[dect:dect + len(template)]))
-            stacked_traces[idx, :] += tr.data[dect:dect + len(template)] / max_abs_value
+            # TODO: do we normalize each detections before stacking?
+            # max_abs_value = np.max(np.abs(tr.data[dect:dect + len(template)]))
+            stacked_traces[idx, :] += tr.data[dect:dect + len(template)] #/ max_abs_value
     stacked_traces /= len(newdect)
 
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, len(template) / st[0].stats.sampling_rate, 
+    x = np.linspace(0, len(template) / st[0].stats.sampling_rate,
                     len(stacked_traces[0, :]), endpoint=False)
+    print(x)
     for i in range(len(stacked_traces)):
-        plt.plot(x, stacked_traces[i, :] + offset, label=f'{pairs[i]}')
+        norm = np.max(np.abs(stacked_traces[i,:]))
+        plt.plot(x, stacked_traces[i, :] / norm + offset, label=f'{pairs[i]}')
         offset -= nb
 
     plt.xlabel('Time (s)', fontsize=14)
@@ -258,7 +283,7 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(stack_plot_filename)
-    plt.close()
+    # plt.close()
 
 def plot_locations(locs, base_dir, events=None):
     """
@@ -300,35 +325,4 @@ def plot_locations(locs, base_dir, events=None):
     plt.ylabel('Latitude')
     plt.title(f'Station and Events Locations on {date}')
     plt.savefig(os.path.join(base_dir, 'plots', f'station_events_locations_{date}.png'))
-    plt.close()
-
-'''
-def get_traces_PB(stas, channels, startdate, network, base_dir): #update needed
-    """
-    Retrieve seismic traces for specified stations and channels on a given date,
-    for the network PB.
-
-    Parameters:
-        stas (list): List of station names.
-        channels (list): List of channel names.
-        date_of_interest (str): The date in the format 'YYYYMMDD'
-        base_dir (str): The base directory for file paths.
-
-    Returns:
-        - list: List of ObsPy Trace objects containing the seismic data.
-
-    Note:
-    - The function yields a Trace object for each station and channel combination.
-    """
-    day_of_year = startdate.timetuple().tm_yday
-    year = startdate.timetuple().tm_year
-    path = os.path.join(base_dir, 'data', 'seed')
-    for sta in stas:
-        file = os.path.join(path, f"{sta}.{network}.{year}.{day_of_year}")
-        try:
-            for cha in range(len(channels)):
-                yield read(file)[cha]
-        except FileNotFoundError:
-            print(f"File {file} not found.")
-'''
-
+    # plt.close()
