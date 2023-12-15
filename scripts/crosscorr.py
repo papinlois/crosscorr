@@ -19,14 +19,15 @@ Description:
     8. Extract template data for each station and cross-correlate with station data.
     9. Plot the template time window on each station-channel combination.
     10. Determine correlations above a threshold, and identify new detections.
-    11. If new detections exist, plot cross-correlation function, stacked traces, 
+    11. If new detections exist, plot cross-correlation function, stacked traces,
     and output to 'output.txt'.
         12. Optionally, reuse detected events as templates by stacking them and repeat the process.
-        13. If new detections with stacked templates exist, plot cross-correlation 
+        13. If new detections with stacked templates exist, plot cross-correlation
         function, stacked traces, and output to 'output.txt'.
-14. Output the script execution time, list of stations and channels used, and additional information.
+14. Output the script execution time, list of stations and channels used,
+and additional information.
 
-Note: This code is made for cross-correlation for several days of continuous 
+Note: This code is made for cross-correlation for several days of continuous
 data. If you want a day, you still have to enter 2 dates of interests.
 
 As of 12/15/23.
@@ -42,8 +43,8 @@ from obspy import UTCDateTime
 import autocorr_tools
 import crosscorr_tools
 
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 
 # Define the base directory
 base_dir = "C:/Users/papin/Desktop/phd/"
@@ -85,6 +86,7 @@ lastday=date_of_interests[-1] #For filenames
 freqmin = 2.0
 freqmax = 8.0
 sampling_rate = 40.0
+dt = 1/sampling_rate
 win_size = 30
 
 # Get the streams and preprocess ###actualize the get_traces fct
@@ -106,7 +108,7 @@ data_plot_filename = os.path.join(
     base_dir,
     f'plots/{folder}/data_plot_{lastday}.png'
 )
-# crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
+crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
 
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
@@ -115,11 +117,11 @@ templates['datetime']=pd.to_datetime(templates['OT'])
 templates = templates[(templates['datetime'] >= st[0].stats.starttime.datetime)
                     & (templates['datetime'] < st[0].stats.endtime.datetime)
                     & (templates['residual'] < 0.1)]
-templates = templates.drop(columns=['dates', 'N'])
+templates = templates.drop(columns=['dates', 'N', 'resisual','starttime'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
-templates=templates[42:42+1]#.iloc[::20]
+templates=templates.iloc[::10]#[42:42+1]
 
 # Plot locations of events and stations
 events = templates[['lon', 'lat', 'depth', 'datetime']]
@@ -135,7 +137,7 @@ output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # If you want to reuse the detections as new templates and go through the process again
 reuse_events=True
-num_repeats=3
+num_repeats=2
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -175,7 +177,8 @@ for idx, template_stats in templates.iterrows():
         break
 
     # Plot template time window on each station-channel combination
-    template_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, 'template1', lastday)
+    template_plot_filename = crosscorr_tools.build_file_path(base_dir,
+                                                             folder, name, 'template1', lastday)
     crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
 
     # Find indices where the cross-correlation values are above the threshold
@@ -196,21 +199,22 @@ for idx, template_stats in templates.iterrows():
         # Check if there are new detections
         if newdect.size > 1:
             # Plot cross-correlation function
-            crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, 'crosscorr1', lastday)
-            crosscorr_tools.plot_crosscorr(tr, xcorrmean, thresh, newdect,
+            crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
+                                                                      folder, name, 'crosscorr1', lastday)
+            crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
                                             max_index, name,
                                             lastday, crosscorr_plot_filename)
 
             # Plot stacked traces
-            stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, 'stack1', lastday)
+            stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
+                                                                  folder, name, 'stack1', lastday)
             crosscorr_tools.plot_stacks(st, template, newdect, pairs,
                                         templ_idx, stack_plot_filename)
 
             ## Writing in output.txt
             # Create UTCDateTime objects from the newevent values
-            newevent = newdect*tr.stats.delta
-            utc_times = [tr.stats.starttime.datetime +
-                         timedelta(seconds=event) for event in newevent]
+            newevent = newdect*dt
+            utc_times = [startdate + timedelta(seconds=event) for event in newevent]
             # Keep track of combination with the most detected events
             if newevent.size>=100:
                 info_lines.append(f"{name}, run 1")
@@ -257,12 +261,12 @@ for idx, template_stats in templates.iterrows():
                         if len(xcorr_template)<len(xcorr_full):
                             xcorr_full=xcorr_full[:len(xcorr_template)]
                         xcorr_full+=xcorr_template
-                    
+
                     all_template=stacked_templ/len(utc_times)
 
                     # Calculate mean cross-correlation
                     xcorrmean=xcorr_full/len(st)
-                    
+
                     # Plot stacked template on each station-channel combination
                     template_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'template{cpt}', lastday)
                     crosscorr_tools.plot_template(st, all_template, pairs,
@@ -286,10 +290,10 @@ for idx, template_stats in templates.iterrows():
                             print("Got new detections with the new templates!")
                             # Plot cross-correlation function for new detections
                             crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'crosscorr{cpt}', lastday)
-                            crosscorr_tools.plot_crosscorr(tr, xcorrmean, thresh, newdect,
+                            crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
                                                             max_index, name,
                                                             lastday, crosscorr_plot_filename)
-                            
+
                             # Plot stacked traces for new detections
                             stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
                             crosscorr_tools.plot_stacks(st, template, newdect, pairs,
@@ -297,9 +301,8 @@ for idx, template_stats in templates.iterrows():
 
                             ## Writing in output.txt
                             # Create UTCDateTime objects from the newevent values
-                            newevent = newdect*tr.stats.delta
-                            utc_times = [tr.stats.starttime.datetime +
-                                         timedelta(seconds=event) for event in newevent]
+                            newevent = newdect*dt
+                            utc_times = [startdate + timedelta(seconds=event) for event in newevent]
                             print(len(utc_times))
                             # Save the cross-correlation values for each newevent
                             cc_values = xcorrmean[newdect]

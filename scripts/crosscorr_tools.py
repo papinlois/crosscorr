@@ -71,7 +71,7 @@ def get_traces(network_config, date_of_interests, base_dir):
                 if network == 'PB':
                     dt = datetime.strptime(date, '%Y%m%d')
                     julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
-                    file = os.path.join(path, 
+                    file = os.path.join(path,
                                         filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
                     try:
                         for i in range(3):
@@ -80,7 +80,7 @@ def get_traces(network_config, date_of_interests, base_dir):
                         print(f"File {file} not found.")
                 else:
                     for cha in channels:
-                        file = os.path.join(path, 
+                        file = os.path.join(path,
                                             filename_pattern.format(date=date, station=sta, channel=cha))
                         try:
                             st += read(file)[0]
@@ -167,13 +167,13 @@ def plot_data(st, stas, channels, data_plot_filename):
     plt.savefig(data_plot_filename)
     # plt.close()
 
-def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
+def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
                    name, lastday, crosscorr_plot_filename):
     """
     Plots cross-correlation data and saves the plot to a file.
 
     Parameters:
-        tr (obspy.core.Trace): Seismic data trace.
+        st (obspy.core.Stream): Seismic data streams.
         xcorrmean (numpy.ndarray): The cross-correlation mean values.
         thresh (float): Threshold for the new detections.
         newdect (numpy.ndarray): Indices of the detected events.
@@ -185,6 +185,7 @@ def plot_crosscorr(tr, xcorrmean, thresh, newdect, max_index,
     Returns:
         None
     """
+    tr=st[0]
     stream_duration = (tr.stats.endtime - tr.stats.starttime)
     _, ax = plt.subplots(figsize=(10, 4))
 
@@ -222,7 +223,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     offset = len(all_template) * nb
     x = np.linspace(0, len(all_template[0]) / st[0].stats.sampling_rate,
                     len(all_template[0]), endpoint=False)
-    print(x)
+    
     # Plot each template with an offset on the y-axis
     for _, (template, pair) in enumerate(zip(all_template, pairs)):
         norm = np.max(np.abs(template.data))
@@ -268,7 +269,7 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename):
     offset = len(stacked_traces) * nb
     x = np.linspace(0, len(template) / st[0].stats.sampling_rate,
                     len(stacked_traces[0, :]), endpoint=False)
-    print(x)
+    
     for i in range(len(stacked_traces)):
         norm = np.max(np.abs(stacked_traces[i,:]))
         plt.plot(x, stacked_traces[i, :] / norm + offset, label=f'{pairs[i]}')
