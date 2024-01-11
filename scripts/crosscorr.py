@@ -30,8 +30,12 @@ and additional information.
 Note: This code is made for cross-correlation for several days of continuous
 data. If you want a day, you still have to enter 2 dates of interests.
 
-As of 12/15/23.
+Issues: 
+        - When data isn't continuous, the fct get_traces doesn't merge
+        - When processing the data, it fills with zeros for missing data : have
+        to change it for nan to avoid issues in the iterative process
 
+As of 01/11/24.
 """
 
 import os
@@ -43,8 +47,8 @@ from obspy import UTCDateTime
 import autocorr_tools
 import crosscorr_tools
 
-import matplotlib
-matplotlib.use('Agg')
+# import matplotlib
+# matplotlib.use('Agg')
 
 # Define the base directory
 base_dir = "C:/Users/papin/Desktop/phd/"
@@ -60,7 +64,7 @@ startscript = time.time()
 # NLLB removed, careful for some of the B stations (B010 + B926)
 network_config = {
     'CN1': {
-        'stations': ['LZB', 'PGC', 'SNB'],
+        'stations': ['LZB', 'PGC', 'SNB'], #, 'NLLB'
         'channels': ['BHN', 'BHE', 'BHZ'],
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
@@ -70,7 +74,7 @@ network_config = {
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
     'PB': {
-        'stations': ['B001', 'B009', 'B011'],
+        'stations': ['B001', 'B009', 'B011'], #, 'B010', 'B926'
         'channels': ['EH1', 'EH2', 'EHZ'],
         'filename_pattern': '{station}.PB.{year}.{julian_day}'
     }
@@ -100,7 +104,7 @@ pairs = [f"{sta}..{cha}" for sta_list, cha_list in zip(stas, channels)
           for sta in sta_list for cha in cha_list]
 
 # To create beforehand
-folder = "test4" #f"{lastday}" #Last day of the series
+folder = "test6" #f"{lastday}" #Last day of the series
 # folder = f"{lastday} {len(date_of_interests)}days" #Last day of the series
 
 # Plot all the streams and get all the combination of sta/cha
@@ -108,20 +112,25 @@ data_plot_filename = os.path.join(
     base_dir,
     f'plots/{folder}/data_plot_{lastday}.png'
 )
-# crosscorr_tools.plot_data(st, stas, channels, data_plot_filename)
+# crosscorr_tools.plot_data(st, stas, channels, pairs, data_plot_filename)
 
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
 templates=templates[(templates['residual']<0.5)]
 templates['datetime']=pd.to_datetime(templates['OT'])
-templates = templates[(templates['datetime'] >= st[0].stats.starttime.datetime)
-                    & (templates['datetime'] < st[0].stats.endtime.datetime)
+templates = templates[(templates['datetime'] >= startdate)
+                    & (templates['datetime'] < enddate)
                     & (templates['residual'] < 0.1)]
-templates = templates.drop(columns=['dates', 'N', 'residual','starttime'])
+templates = templates.drop(columns=['dates', 'residual']) # 'N', 
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
-templates=templates[120:120+1]#.iloc[::10]
+templates = templates.sort_values(by='N', ascending=False)
+# templates=templates.iloc[14:14+1]#[::3]
+# print(templates)
+
+# Which stations detected the events
+A = np.load('C:/Users/papin/Desktop/phd/all_T_0.1_3.npy',allow_pickle=True).item()
 
 # Plot locations of events and stations
 events = templates[['lon', 'lat', 'depth', 'datetime']]
@@ -147,9 +156,10 @@ for idx, template_stats in templates.iterrows():
     templ_idx=idx
     name = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
+    st2, pairs2 = crosscorr_tools.process_streams(st, template_stats, A)
 
     # Iterate over all stations and channels combination
-    for tr in st:
+    for tr in st2:
         # Template data
         start_templ = UTCDateTime(template_stats['datetime'] + timedelta(seconds=10))
         end_templ = start_templ + timedelta(seconds=win_size)
@@ -170,7 +180,7 @@ for idx, template_stats in templates.iterrows():
         xcorr_full+=xcorr_template
 
     # Network cross-correlation
-    xcorrmean=xcorr_full/len(st)
+    xcorrmean=xcorr_full/len(st2)
 
     # If it goes over the next day, template not defined and end of the run
     if not all_template:
@@ -179,7 +189,7 @@ for idx, template_stats in templates.iterrows():
     # Plot template time window on each station-channel combination
     template_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                              folder, name, 'template1', lastday)
-    crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
+    crosscorr_tools.plot_template(st2, all_template, pairs2, templ_idx, template_plot_filename)
 
     # Find indices where the cross-correlation values are above the threshold
     mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
@@ -201,7 +211,7 @@ for idx, template_stats in templates.iterrows():
             # Plot cross-correlation function
             crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                                       folder, name, 'crosscorr1', lastday)
-            crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
+            crosscorr_tools.plot_crosscorr(st2, xcorrmean, thresh, newdect,
                                             max_index, name,
                                             lastday, crosscorr_plot_filename)
 
@@ -266,12 +276,6 @@ for idx, template_stats in templates.iterrows():
 
                     # Calculate mean cross-correlation
                     xcorrmean=xcorr_full/len(st)
-
-                    # Plot stacked template on each station-channel combination
-                    # TODO: no need to plot again the templates since it's the previous plot_stack?
-                    template_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'template{cpt}', lastday)
-                    crosscorr_tools.plot_template(st, all_template, pairs,
-                                                  templ_idx, template_plot_filename)
 
                     # Find indices where the cross-correlation values are above the threshold
                     mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
