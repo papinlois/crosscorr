@@ -316,7 +316,7 @@ def clusterdects(dects,windowlen):
     return dbscan_labels1
 
 def culldects(dects,clusters,xcorr):
-    newdect=np.empty(clusters[-1]+1,dtype=np.int)
+    newdect=np.empty(clusters[-1]+1,dtype=int)
     for ii in range(clusters[-1]+1):
 #        print('ii='+str(ii))
         tinds=np.where(clusters==ii)[0]

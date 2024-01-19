@@ -112,8 +112,16 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     for tr in st:
+        # # Check if fill value is applied
+        # original_data = tr.data.copy()
+       
         tr.trim(starttime=starttime, endtime=endtime, pad=1,
                 fill_value=0, nearest_sample=False)
+       
+        # # Check for changes and print if fill value is applied
+        # if not np.array_equal(original_data, tr.data):
+        #     print(f"Trace {tr.id} is filled with the value 0.")
+       
         if tr.stats.sampling_rate != 100.0:
             tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
@@ -161,7 +169,7 @@ def plot_data(st, stas, channels, pairs, data_plot_filename):
     plt.close()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
-                   name, lastday, crosscorr_plot_filename):
+                   name, lastday, templ_idx, crosscorr_plot_filename, cpt):
     """
     Plots cross-correlation data and saves the plot to a file.
 
@@ -173,7 +181,9 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
         max_index (int): Index of the maximum value in the cross-correlation.
         name (str): Combination identifier for the plot title.
         lastday (str): Date identifier for the plot title.
+        templ_idx (int): Index of the template.
         crosscorr_plot_filename (str): Path to save the plot.
+        cpt (int): Number of the iteration for the title.
 
     Returns:
         None
@@ -185,17 +195,17 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
     ax.plot(tr.stats.delta * np.arange(len(xcorrmean)), xcorrmean)
     ax.axhline(thresh, color='red')
     ax.plot(newdect * tr.stats.delta, xcorrmean[newdect], 'kx')
-    ax.plot((newdect * tr.stats.delta)[max_index],
-            (xcorrmean[newdect])[max_index], 'gx', markersize=10, linewidth=10)
+    # ax.plot((newdect * tr.stats.delta)[max_index],
+    #         (xcorrmean[newdect])[max_index], 'gx', markersize=10, linewidth=10)
     ax.text(60, 1.1 * thresh, '8*MAD', fontsize=14, color='red')
     ax.set_xlabel('Time (s)', fontsize=14)
     ax.set_ylabel('Correlation Coefficient', fontsize=14)
     ax.set_xlim(0, stream_duration)
-    ax.set_title(f'{name}_{lastday}', fontsize=16)
+    ax.set_title(f'Cross-correlation Function for Template {templ_idx} - Iteration {cpt}', fontsize=16)
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    plt.close()
+    plt.show()
 
 def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
@@ -245,6 +255,7 @@ def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename, cp
         pairs (list): List of pairs corresponding to each trace in st.
         templ_idx (int): Index of the template.
         stack_plot_filename (str): Filename for saving the plot.
+        cpt (int): Number of the iteration for the title.
 
     Returns:
         None
