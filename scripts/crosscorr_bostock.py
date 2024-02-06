@@ -46,43 +46,45 @@ import crosscorr_tools
 # import matplotlib
 # matplotlib.use('Agg')
 
-# Define the base directory
-base_dir = "C:/Users/papin/Desktop/phd/"
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-# # Plot station locations
-# locfile = pd.read_csv(os.path.join(base_dir, 'stations.csv'))
-# locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
+# Define the base directory
+base_dir = "/Users/lpapin/Documents/phd/"
+folder = "bostock" 
 
 # Start timer
 startscript = time.time()
 
-# Define the network configurations
+# Define the network configurations 
 network_config = {
     '1CN': {
-        'stations': ['PGC', 'SNB', 'NLLB'], #, 'LZB', 'VGZ',
+        'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
         'channels': ['BHN', 'BHE', 'BHZ'],
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
     '2CN': {
-        'stations': ['PFB'], #,'YOUB'
+        'stations': ['PFB'], #, 'YOUB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
     'C8': {
-        'stations': ['JRBC'], #'GLBC', 'SHVB', 'TWBB', 'MGCB',  
+        'stations': ['MGCB', 'JRBC'], # , 'PHYB', 'SHVB','LCBC', 'GLBC', 'TWBB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
     },
     'PO': {
-        'stations': ['KLNB', 'SILB', 'TWKB'], # , 'SSIB', 'TSJB'
+        'stations': ['TSJB', 'SILB', 'SSIB', 'KLNB'], # , 'TWKB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
     }
 }
 
 # Days of data 
-date_of_interests = ["20050903","20050904","20050905","20050906"]#,"20050907","20050908"]#,
-                     # "20050909","20050910","20050911","20050912","20050913","20050914"]
+date_of_interests = ["20050903","20050904","20050905","20050906","20050907","20050908"]#,
+                     # "20050909","20050910","20050911","20050912","20050913","20050914",
+                     # "20050915","20050916","20050917","20050918","20050919","20050920",
+                     # "20050921","20050922","20050923","20050924","20050925"]
 startdate=datetime.strptime(date_of_interests[0], "%Y%m%d")
 enddate=startdate+timedelta(days=len(date_of_interests) - 1)
 lastday=date_of_interests[-1] #For filenames
@@ -92,52 +94,62 @@ freqmin = 2.0
 freqmax = 8.0
 sampling_rate = 40.0
 dt = 1/sampling_rate
-win_size = 30
+win_size = 8
 
 # Get the streams and preprocess ###actualize the get_traces fct
-st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
+st, network_config = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
 st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate)
 
 # List of stations/channels to analyze
-stas = [network_config[key]['stations'] for key in network_config]
-channels = [network_config[key]['channels'] for key in network_config]
 pairs=[]
 for tr in st:
     iid = tr.id
     identifier = iid[3:] 
     pairs.append(identifier)
 
-# To create beforehand
-folder = "bostock" #f"{lastday}" #Last day of the series
-# folder = f"{lastday} {len(date_of_interests)}days" #Last day of the series
+# Plot all the streams and get all the combination of sta/cha
+data_plot_filename = os.path.join(
+    base_dir,
+    f'plots/{folder}/data_plot.png'
+)
+crosscorr_tools.plot_data(st, pairs, data_plot_filename)
 
-# # Plot all the streams and get all the combination of sta/cha
-# data_plot_filename = os.path.join(
-#     base_dir,
-#     f'plots/{folder}/data_plot_{lastday}.png'
-# )
-# crosscorr_tools.plot_data(st, stas, channels, pairs, data_plot_filename)
+# # Remove the bad data 
+# tr_remove = ['PGC..BHE', 'SHVB..HHE', 'SHVB..HHN','SNB..BHE','TWKB..HHE','VGZ..BHE','YOUB..HHZ']
+# idx_remove = [i for i, tr in enumerate(st) 
+#               if tr.stats.station + '..' + tr.stats.channel in tr_remove]
+# for idx in sorted(idx_remove, reverse=True):
+#     st.pop(idx)
+#     del pairs[idx]
 
 # Load LFE data on Bostock's catalog
-templates = pd.read_csv('lfe_svi.txt', index_col=0, dtype={'date': str, 'hour': str})
+templates = pd.read_csv('lfe_svi.txt', index_col=0, dtype={'date': str, 'hour': str, 'lfe_family':str})
 templates['date'] = '20' + templates['date']
 templates['date'] = pd.to_datetime(templates['date'], format='%Y%m%d')
 templates['hour'] = templates['hour'].str.zfill(2)
-templates['datetime'] = templates['date'] + pd.to_timedelta(templates['hour'].astype(int), unit='h') + pd.to_timedelta(templates['second'], unit='s')
-templates = templates[(templates['datetime'] >= startdate) & (templates['datetime'] < enddate)]
+templates['OT'] = templates['date'] + pd.to_timedelta(templates['hour'].astype(int), unit='h') + pd.to_timedelta(templates['second'], unit='s')
+templates = templates[(templates['OT'] >= startdate) & (templates['OT'] < enddate)]
 templates = templates.drop(columns=['Mw','hour','second','date'])
-templates = templates.sort_values(by='datetime', ascending=True)
+# templates = templates.sort_values(by='OT', ascending=True)
+# templates = templates.sort_values(by='lfe_family', ascending=False)
+# templates = templates.sort_values(by=['lfe_family', 'OT'], ascending=[True, True])
 templates.reset_index(inplace=True)
 templates.index.name = 'Index'
-# To choose which templates
-# templates=templates.iloc[1:1+1]#[::3]
-# templates=templates.groupby('lfe_family').first().reset_index()
-# templates=templates.iloc[0:0+1]
-# print(templates)
 
-# Plot locations of events and stations
-# events = templates[['lon', 'lat', 'depth', 'datetime']]
-# crosscorr_tools.plot_locations(locs, base_dir, events=events)
+## To choose which templates
+# # 1 event per family
+templates=templates.groupby('lfe_family').first().reset_index()
+# # 1 template
+# templates=templates.iloc[62:62+1]
+# templates=templates[2007:2011+1] # pour OT descending #1256
+# # 1 template every 50
+# templates=templates[::5]
+# # 1 template, 1 event per day
+# templates = templates[templates['lfe_family'] == '176']
+# templates = templates.groupby(templates['OT'].dt.date).first()
+# templates['Index'] = range(len(templates))
+# templates.set_index('Index', inplace=True)
+print(templates)
 
 # Collect information
 info_lines = []  # Store lines of information
@@ -163,7 +175,7 @@ for idx, template_stats in templates.iterrows():
     # Iterate over all stations and channels combination
     for tr in st:
         # Template data
-        start_templ = UTCDateTime(template_stats['datetime'])# + timedelta(seconds=10)
+        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=8)
         end_templ = start_templ + timedelta(seconds=win_size)
         if end_templ.day > enddate.day:
             print('Last template has an ending time on a wrong day: not processed.')
@@ -220,7 +232,7 @@ for idx, template_stats in templates.iterrows():
             # Plot stacked traces
             stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                                   folder, name, 'stack1', lastday)
-            crosscorr_tools.plot_stacks(st, template, newdect, pairs,
+            crosscorr_tools.plot_stacks(st, newdect, pairs,
                                         templ_idx, stack_plot_filename, cpt=1)
 
             ## Writing in output.txt
@@ -293,7 +305,7 @@ for idx, template_stats in templates.iterrows():
                         newdect = autocorr_tools.culldects(inds, clusters, xcorrmean)
 
                         # Check if there are new detections
-                        if newdect.size > 1:
+                        if newdect.size > 1 and newdect.size < 350:
                             print("Got new detections with the new templates!")
                             # Plot cross-correlation function for new detections
                             crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'crosscorr{cpt}', lastday)
@@ -303,7 +315,7 @@ for idx, template_stats in templates.iterrows():
  
                             # Plot stacked traces for new detections
                             stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
-                            crosscorr_tools.plot_stacks(st, template, newdect, pairs,
+                            crosscorr_tools.plot_stacks(st, newdect, pairs,
                                                         templ_idx, stack_plot_filename, cpt=cpt)
 
                             ## Writing in output.txt
@@ -317,6 +329,7 @@ for idx, template_stats in templates.iterrows():
                             if newevent.size>=100:
                                 info_lines.append(f"{name}, run {cpt}")
                             num_detections+=newevent.size
+                            # TODO: rajouter lfe_family dans output.txt
                             #  Write the newevent and additional columns to the output file
                             with open(output_file_path, "a", encoding=("utf-8")) as output_file:
                                 for i, utc_time in enumerate(utc_times):

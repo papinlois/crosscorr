@@ -29,6 +29,7 @@ As of 01/11/24.
 import os
 import numpy as np
 from datetime import datetime
+from collections import Counter
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from obspy.core import read, Stream
@@ -86,12 +87,32 @@ def get_traces(network_config, date_of_interests, base_dir):
                     print(f"File not found for {network} network, station {sta}, date {date}.")
 
     # Merge all data by stations and channels
-    st._trim_common_channels()
-    # print(st.__str__(extended=True))
+    # st._trim_common_channels()
+    # st._cleanup()
+    st.merge(method=1,fill_value='interpolate',interpolation_samples=-1)
     st._cleanup()
-    # print(st.__str__(extended=True))
 
-    return st
+    # TODO: Create a version where it removes the data that aren't good
+    # TODO: Duplicates search can be removed
+    # Check for duplicate IDs
+    id_counter = Counter([tr.id for tr in st])
+    duplicates = [id for id, count in id_counter.items() if count > 1]
+
+    if duplicates:
+        # Extract station names corresponding to duplicate IDs
+        duplicated_stations = [tr.stats.station for tr in st if tr.id in duplicates]
+        print(f"Warning: Duplicate IDs found. Removing stations {list(set(duplicated_stations))}.")
+        st = Stream([tr for tr in st if tr.id not in duplicates])
+
+    updated_network_config = network_config.copy()
+
+    if duplicates:
+        for network, config in updated_network_config.items():
+            stations = config['stations']
+            updated_stations = [sta for sta in stations if sta not in duplicated_stations]
+            updated_network_config[network]['stations'] = updated_stations
+
+    return st, updated_network_config
 
 def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
     """
@@ -102,6 +123,8 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
         sampling_rate (float): Sampling rate for interpolation.
         freqmin (float): Minimum frequency for bandpass filtering.
         freqmax (float): Maximum frequency for bandpass filtering.
+        startdate (str): Start date for trimming.
+        enddate (str): End date for trimming.
 
     Returns:
         st (obspy.core.Stream): Seismic data streams.
@@ -129,44 +152,40 @@ def process_data(st, sampling_rate, freqmin, freqmax, startdate, enddate):
 
     return st
 
-def plot_data(st, stas, channels, pairs, data_plot_filename):
+def plot_data(st, pairs, data_plot_filename):
     """
     Plot seismic station data for a specific date.
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
-        stas (list): List of station names.
+        stas (list of lists): List of lists of station names.
         channels (list): List of channel names.
         data_plot_filename (str): Filename for saving the plot.
 
     Returns:
         None
     """
-    plt.figure(figsize=(12, 6))
-    nb = 1  # Distance between plots
-    offset = len(st) * nb
-
-    # # Get the start date from the first trace in the stream
-    # x = np.linspace(0, len(st[0]) / st[0].stats.sampling_rate,
-    #                 len(st[0]), endpoint=False)
-    
-    # start_date = st[0].stats.starttime.strftime("%Y%m%d")
-    # Plot each template with an offset on the y-axis
-    for _, (tr, pair) in enumerate(zip(st, pairs)):
-        norm = np.max(np.abs(tr.data))
-        plt.plot(tr.data / norm + offset, label=f'{pair}')
-        offset -= nb
-    
-    plt.xlabel('Time (s)', fontsize=14)
-    plt.ylabel('Normalized Data + Offset', fontsize=14)
-    plt.title('Full days of data', fontsize=16)
-    plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
-    plt.grid(True)
-    plt.xlim(0, 3456000)
-    plt.ylim(0, len(st) * nb + nb)
-    plt.tight_layout()
-    plt.savefig(data_plot_filename)
-    plt.close()
+    cpt=0
+    for i in range(0, len(st), 3):
+        plt.figure(figsize=(12, 6))
+        nb = 1  # Distance between plots
+        offset = len(st[i:i+3]) * nb
+        for tr in st[i:i+3]:
+            pair=pairs[cpt]
+            norm = np.max(np.abs(tr.data))
+            plt.plot(tr.times(), tr.data / norm + offset, label=f'{pair}')
+            offset -= nb
+            cpt+=1
+        plt.xlabel('Time (s)', fontsize=14)
+        plt.ylabel('Normalized Data + Offset', fontsize=14)
+        plt.title(f'Data from {tr.stats.starttime.date} to {tr.stats.endtime.date}', fontsize=16)
+        plt.yticks(np.arange(len(st[i:i+3])) * nb+nb, pairs[cpt-3:cpt][::-1], fontsize=12)
+        plt.grid(True)
+        plt.xlim(0, max(tr.times()))
+        plt.ylim(0, len(st[i:i+3]) * nb + nb)
+        plt.tight_layout()
+        plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
+        plt.close()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
                    name, lastday, templ_idx, crosscorr_plot_filename, cpt):
@@ -205,7 +224,7 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, max_index,
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    plt.show()
+    plt.close()
 
 def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
@@ -244,46 +263,98 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.savefig(template_plot_filename)
     plt.close()
 
-def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename, cpt):
+# =============================================================================
+# def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename, cpt):
+#     """
+#     Plot the combined traces for a detection and its corresponding template.
+# 
+#     Parameters:
+#         st (obspy.core.Stream): Seismic data streams.
+#         template (obspy.core.Trace): Seismic data trace of the template.
+#         newdect (numpy.ndarray): Indices of the detected events.
+#         pairs (list): List of pairs corresponding to each trace in st.
+#         templ_idx (int): Index of the template.
+#         stack_plot_filename (str): Filename for saving the plot.
+#         cpt (int): Number of the iteration for the title.
+# 
+#     Returns:
+#         None
+#     """
+#     stacked_traces = np.zeros((len(st), len(template)))
+#     for idx, tr in enumerate(st):
+#         for dect in newdect:
+#             # max_abs_value = np.max(np.abs(tr.data[dect:dect + len(template)]))
+#             stacked_traces[idx, :] += tr.data[dect:dect + len(template)] #/ max_abs_value
+#     stacked_traces /= len(newdect)
+# 
+#     plt.figure(figsize=(12,6))
+#     nb = 1  # Distance between plots
+#     offset = len(stacked_traces) * nb
+#     x = np.linspace(0, len(template) / st[0].stats.sampling_rate,
+#                     len(stacked_traces[0, :]), endpoint=False)
+#     
+#     for i in range(len(stacked_traces)):
+#         norm = np.max(np.abs(stacked_traces[i,:]))
+#         plt.plot(x, stacked_traces[i, :] / norm + offset, label=f'{pairs[i]}')
+#         offset -= nb
+# 
+#     plt.xlabel('Time (s)', fontsize=14)
+#     plt.ylabel('Normalized Data + Offset', fontsize=14)
+#     plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt}', fontsize=16)
+#     plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
+#     plt.xlim(0, max(x))
+#     plt.ylim(0, len(pairs) * nb + nb)
+#     plt.grid(True)
+#     plt.tight_layout()
+#     plt.savefig(stack_plot_filename)
+#     plt.show()
+# =============================================================================
+
+## TODO: Need to verify this one
+def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
     Plot the combined traces for a detection and its corresponding template.
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
-        template (obspy.core.Trace): Seismic data trace of the template.
         newdect (numpy.ndarray): Indices of the detected events.
         pairs (list): List of pairs corresponding to each trace in st.
-        templ_idx (int): Index of the template.
         stack_plot_filename (str): Filename for saving the plot.
         cpt (int): Number of the iteration for the title.
 
     Returns:
         None
     """
-    stacked_traces = np.zeros((len(st), len(template)))
+    sampling_rate = st[0].stats.sampling_rate
+    window_size_before = 5  # seconds
+    window_size_after = 25  # seconds
+
+    stacked_traces = np.zeros((len(st), int((window_size_before + window_size_after) * sampling_rate)))
+
+    ## SEEMS WRONG
     for idx, tr in enumerate(st):
         for dect in newdect:
-            # TODO: do we normalize each detections before stacking?
-            # max_abs_value = np.max(np.abs(tr.data[dect:dect + len(template)]))
-            stacked_traces[idx, :] += tr.data[dect:dect + len(template)] #/ max_abs_value
+            start_index = int(dect - window_size_before * sampling_rate)
+            end_index = int(dect + window_size_after * sampling_rate)
+            stacked_traces[idx, :] += tr.data[start_index:end_index]
+
     stacked_traces /= len(newdect)
 
-    plt.figure(figsize=(12,6))
+    plt.figure(figsize=(12, 6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, len(template) / st[0].stats.sampling_rate,
-                    len(stacked_traces[0, :]), endpoint=False)
-    
+    x = np.linspace(-window_size_before, window_size_after, len(stacked_traces[0, :]), endpoint=False)
+
     for i in range(len(stacked_traces)):
-        norm = np.max(np.abs(stacked_traces[i,:]))
+        norm = np.max(np.abs(stacked_traces[i, :]))
         plt.plot(x, stacked_traces[i, :] / norm + offset, label=f'{pairs[i]}')
         offset -= nb
 
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt}', fontsize=16)
-    plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
-    plt.xlim(0, max(x))
+    plt.yticks(np.arange(len(pairs)) * nb + nb, pairs[::-1], fontsize=12)
+    plt.xlim(-window_size_before, window_size_after)
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
     plt.tight_layout()

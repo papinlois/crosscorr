@@ -468,6 +468,7 @@ def correlate_template(data, template, mode='valid', normalize='full',
             norm *= tnorm
             if norm.dtype == float:
                 np.sqrt(norm, out=norm)
+                # print(norm)
             else:
                 norm = np.sqrt(norm)
             mask = norm <= np.finfo(float).eps
