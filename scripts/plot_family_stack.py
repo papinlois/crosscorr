@@ -30,13 +30,13 @@ folder = "bostock"
 
 # Define the network configurations #see crosscorr_bostock
 network_config = {
-    # '1CN': {
-    #     'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
-    #     'channels': ['BHN', 'BHE', 'BHZ'],
-    #     'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    '1CN': {
+        'stations': ['LZB'],#,'PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
+        'channels': ['BHN', 'BHE', 'BHZ'],
+        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     # },
     # '2CN': {
-    #     'stations': ['PFB'], #, 'YOUB'
+    #     'stations': ['PFB'],#, 'YOUB'], #
     #     'channels': ['HHN', 'HHE', 'HHZ'],
     #     'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     # },
@@ -45,10 +45,10 @@ network_config = {
     #     'channels': ['HHN', 'HHE', 'HHZ'],
     #     'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
     # },
-    'PO': {
-        'stations': ['TWKB'], # , SSIB', 'KLNB' 'TSJB', 'SILB', '
-        'channels': ['HHN', 'HHE', 'HHZ'],
-        'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
+    # 'PO': {
+    #     'stations': ['SILB', 'SSIB', 'KLNB'], # , 'TSJB', 'TWKB'
+    #     'channels': ['HHN', 'HHE', 'HHZ'],
+    #     'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
     }
 }
 
@@ -99,7 +99,7 @@ templates = templates.drop(columns=['Mw','hour','second','date'])
 templates.reset_index(inplace=True)
 templates.index.name = 'Index'
 ## To choose which templates
-templ_idx='001'
+templ_idx='002'
 templates = templates[templates['lfe_family'] == templ_idx]
 print(templates)
 # Select 20 templates randomly from the last set of templates
@@ -114,8 +114,8 @@ OT_templ = templates['OT']
 
 for idx, tr in enumerate(st):
     for start_templ in OT_templ:
-        start_templ = UTCDateTime(start_templ) - timedelta(seconds=5)
-        end_templ = start_templ + timedelta(seconds=win_size)
+        start_templ = UTCDateTime(start_templ) #+ timedelta(seconds=win_size)
+        end_templ = start_templ + timedelta(seconds=50)
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
         # Normalize the template waveform
         max_amplitude = np.max(np.abs(template.data))

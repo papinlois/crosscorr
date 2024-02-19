@@ -22,7 +22,7 @@ import pandas as pd
 from obspy import UTCDateTime
 from scipy.signal import find_peaks
 # from eqcorrscan.utils import findpeaks
-from network_configurations import network_config
+# from network_configurations import network_config
 import autocorr_tools
 import crosscorr_tools
 
@@ -40,23 +40,23 @@ startscript = time.time()
 
 # Define the network configurations # or network_configurations.py with import
 network_config = {
-    '1CN': {
-        'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
-        'channels': ['BHN', 'BHE', 'BHZ'],
-        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
-    },
-    '2CN': {
-        'stations': ['PFB', 'YOUB'], #
-        'channels': ['HHN', 'HHE', 'HHZ'],
-        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
-    },
+    # '1CN': {
+    #     'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
+    #     'channels': ['BHN', 'BHE', 'BHZ'],
+    #     'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    # },
+    # '2CN': {
+    #     'stations': ['PFB'],#, 'YOUB'], #
+    #     'channels': ['HHN', 'HHE', 'HHZ'],
+    #     'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    # },
     'C8': {
         'stations': ['MGCB', 'JRBC'], # , 'PHYB', 'SHVB','LCBC', 'GLBC', 'TWBB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
     },
     'PO': {
-        'stations': ['TSJB', 'SILB', 'SSIB', 'KLNB'], # , 'TWKB'
+        'stations': ['SILB', 'SSIB', 'KLNB'], # , 'TSJB', 'TWKB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
     }
@@ -106,24 +106,25 @@ templates['hour'] = templates['hour'].str.zfill(2)
 templates['OT'] = templates['date'] + pd.to_timedelta(templates['hour'].astype(int), unit='h') + pd.to_timedelta(templates['second'], unit='s')
 templates = templates[(templates['OT'] >= startdate) & (templates['OT'] < enddate)]
 templates = templates.drop(columns=['Mw','hour','second','date'])
-# templates = templates.sort_values(by='OT', ascending=True)
+templates = templates.sort_values(by='OT', ascending=True)
 templates = templates.sort_values(by='lfe_family', ascending=False)
-# templates = templates.sort_values(by=['lfe_family', 'OT'], ascending=[True, True])
+templates = templates.sort_values(by=['lfe_family', 'OT'], ascending=[True, True])
 templates.reset_index(inplace=True)
 templates.index.name = 'Index'
 ## To choose which templates
 # # 1 event per family
-templates=templates.groupby('lfe_family').first().reset_index()
+# templates=templates.groupby('lfe_family').first().reset_index()
 # # 1 template
 # templates=templates.iloc[0:0+1]
 # templates=templates[1:1+1] # pour OT descending #1256
 # # 1 template every 50
 # templates=templates[::5]
 # # 1 template, 1 event per day
-# templates = templates[templates['lfe_family'] == '256']
+templates = templates[templates['lfe_family'] == '001']
 # templates = templates.groupby(templates['OT'].dt.date).first()
 # templates['Index'] = range(len(templates))
 # templates.set_index('Index', inplace=True)
+templates=templates.iloc[2:2+1]
 print(templates)
 
 # Collect information
@@ -135,7 +136,7 @@ output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # If you want to reuse the detections as new templates and go through the process again
 reuse_events=True
-num_repeats=4
+num_repeats=5
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -143,7 +144,7 @@ for idx, template_stats in templates.iterrows():
     template=[]
     all_template=[]
     templ_idx=idx
-    family_idx=templates['lfe_family'][0]
+    family_idx=templates['lfe_family'].iloc[0]
     name = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
 
@@ -169,7 +170,7 @@ for idx, template_stats in templates.iterrows():
         
         # Check if there are any NaN values ## when doing a lot of days : thresh=nan
         if np.isnan(xcorr_full).any():
-            print("Array contains NaN values.")
+            print(f"Trace {tr.id} contains NaN values.")
             nan_indices = np.where(np.isnan(xcorr_full))
 
     # Network cross-correlation
@@ -185,7 +186,7 @@ for idx, template_stats in templates.iterrows():
     crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
 
     # Find indices where the cross-correlation values are above the threshold
-    mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
+    mad = np.nanmedian(np.abs(xcorrmean - np.nanmedian(xcorrmean)))
     thresh = 8 * mad
 
     # Determine if there are new detections
@@ -230,7 +231,7 @@ for idx, template_stats in templates.iterrows():
         print(f"Got {len(utc_times)} detections so let's reuse them as templates by stacking them!")
         for _ in range(num_repeats):
             cpt+=1
-            print("Number of iteration :", cpt)
+            print("Number of the next iteration :", cpt)
             # Plot new templates, cross-correlation, and new detections
             if reuse_events:
                 xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
@@ -250,9 +251,6 @@ for idx, template_stats in templates.iterrows():
                         # Add the normalized template to the stacked trace
                         stacked_templ[idx, :] += template.data
 
-                        # Other way :
-                        # stacked_templ[idx, :] += template.data
-
                     # Cross-correlate stacked template with station data
                     xcorr_template = autocorr_tools.correlate_template(
                         tr.data, stacked_templ[idx,:],
@@ -269,7 +267,7 @@ for idx, template_stats in templates.iterrows():
                 xcorrmean=xcorr_full/len(st)
 
                 # Find indices where the cross-correlation values are above the threshold
-                mad = np.median(np.abs(xcorrmean - np.median(xcorrmean)))
+                mad = np.nanmedian(np.abs(xcorrmean - np.nanmedian(xcorrmean)))
                 thresh = 8 * mad
 
                 # Determine if there are new detections

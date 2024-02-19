@@ -122,42 +122,39 @@ def process_data(st, sampling_rate, freqmin, freqmax):
 
     return st
 
-# =============================================================================
-#
-# def process_streams(st, template_stats, A):
-#     """
-#     Process seismic traces and create a new Stream and a list of station-channel pairs.
-#
-#     Parameters:
-#         st (obspy.core.Stream): Seismic data streams.
-#         template_stats (dict): Metadata template information.
-#         A (dict): Dictionary containing additional information based on the template.
-#
-#     Returns:
-#         st2 (obspy.core.Stream): Filtered seismic data streams based on the template.
-#         pairs2 (list): List of pairs corresponding to each trace in st2.
-#     """
-#     starttime = str(template_stats['starttime'])
-#
-#     # Extract information from the template
-#     templ_info = A[starttime]
-#     stas = templ_info['sta']
-#
-#     # Filter streams based on station codes
-#     st2 = Stream()
-#     for tr in st:
-#         # Extract station code from trace id
-#         station_code = tr.stats.network + '.' + tr.stats.station
-#
-#         # Check if the station code is in the list of desired stations
-#         if station_code in stas:
-#             st2 += tr
-#
-#     # Create a list of station-channel pairs for st2
-#     pairs2 = [f"{tr.stats.station}.{tr.stats.channel}" for tr in st2]
-#
-#     return st2, pairs2
-# =============================================================================
+def process_streams(st, template_stats, A):
+    """
+    Process seismic traces and create a new Stream and a list of station-channel pairs.
+
+    Parameters:
+        st (obspy.core.Stream): Seismic data streams.
+        template_stats (dict): Metadata template information.
+        A (dict): Dictionary containing additional information based on the template.
+
+    Returns:
+        st2 (obspy.core.Stream): Filtered seismic data streams based on the template.
+        pairs2 (list): List of pairs corresponding to each trace in st2.
+    """
+    starttime = str(template_stats['starttime'])
+
+    # Extract information from the template
+    templ_info = A[starttime]
+    stas = templ_info['sta']
+
+    # Filter streams based on station codes
+    st2 = Stream()
+    for tr in st:
+        # Extract station code from trace id
+        station_code = tr.stats.network + '.' + tr.stats.station
+
+        # Check if the station code is in the list of desired stations
+        if station_code in stas:
+            st2 += tr
+
+    # Create a list of station-channel pairs for st2
+    pairs2 = [f"{tr.stats.station}.{tr.stats.channel}" for tr in st2]
+
+    return st2, pairs2
 
 # ========== All Types of Plots ==========
 
@@ -271,7 +268,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(template_plot_filename)
-    plt.close()
+    plt.show()
 
 def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
@@ -288,14 +285,14 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     Returns:
         None
     """
-    stacked_traces = np.zeros((len(st), int(30 * st[0].stats.sampling_rate)))
+    stacked_traces = np.zeros((len(st), int(55 * st[0].stats.sampling_rate)))
     for idx, tr in enumerate(st):
         for dect in newdect:
             # Normalize each waveform by its maximum absolute amplitude
-            start_time = dect  # Start from the detection point
-            end_time = dect + int(30 * tr.stats.sampling_rate)  # 30-second window
+            start_time = dect - int(5 * tr.stats.sampling_rate) # Start from the detection point
+            end_time = dect + int(50 * tr.stats.sampling_rate)  # 30-second window
             if end_time > len(tr.data):
-                continue  # Skip if the window goes beyond the waveform boundaries
+                continue
             waveform_window = tr.data[start_time:end_time]
             max_abs_value = np.max(np.abs(waveform_window))
             normalized_waveform = waveform_window / max_abs_value
@@ -305,7 +302,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, 30, len(stacked_traces[0, :]), endpoint=False)
+    x = np.linspace(-5, 50, len(stacked_traces[0, :]), endpoint=False)
 
     for i in range(len(stacked_traces)):
         norm = np.max(np.abs(stacked_traces[i,:]))
@@ -316,7 +313,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt}', fontsize=16)
     plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
-    plt.xlim(0, 30)
+    plt.xlim(-5, 20)
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
     plt.tight_layout()
