@@ -311,22 +311,28 @@ def generate_detection_plot(st_filt,newdect,xcorrtot):
             plt.title(st_filt[staind].stats.station+'-'+st_filt[staind].stats.channel)
 
 def clusterdects(dects,windowlen):
+    '''
+    Detect clusters in the detections data and number it.
+    '''
     dbscan_dataset1 = DBSCAN(eps=windowlen, min_samples=1, metric='euclidean').fit_predict(dects.reshape(-1, 1))
     dbscan_labels1 = dbscan_dataset1
     return dbscan_labels1
 
 def culldects(dects,clusters,xcorr):
+    '''
+    Give to each cluster the highest xcorr value so we don't keep every dects.
+    '''
     newdect=np.empty(clusters[-1]+1,dtype=int)
     for ii in range(clusters[-1]+1):
-#        print('ii='+str(ii))
+        # print('ii='+str(ii))
         tinds=np.where(clusters==ii)[0]
-#        print(tinds)
+        # print(tinds)
         dectinds=dects[tinds]
-#        print(dectinds)
+        # print(dectinds)
         values=xcorr[dectinds]
-#        print(values)
-#        print(np.argmax(values))
-#        print(dects[np.argmax(values)])
+        # print(values)
+        # print(np.argmax(values))
+        # print(dects[np.argmax(values)])
         newdect[ii]=int(dectinds[np.argmax(values)])     
     return newdect
 
