@@ -24,35 +24,35 @@ folder = "bostock"
 
 # ========== Plotting Data Streams ==========
 
-# Define the network configurations #see crosscorr_bostock
+# Define the network configurations # or network_configurations.py with import
 network_config = {
-    # '1CN': {
-    #     'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
-    #     'channels': ['BHN', 'BHE', 'BHZ'],
-    #     'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
-    # },
+    '1CN': {
+        'stations': ['LZB','PGC'],#, 'NLLB', 'SNB'], , 'VGZ'#
+        'channels': ['BHN', 'BHE', 'BHZ'],
+        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
+    },
     '2CN': {
-        'stations': ['PFB'], #, 'YOUB'
+        'stations': ['PFB', 'YOUB'], #
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
     },
-    # 'C8': {
-    #     'stations': ['MGCB', 'JRBC'], # , 'PHYB', 'SHVB','LCBC', 'GLBC', 'TWBB'
-    #     'channels': ['HHN', 'HHE', 'HHZ'],
-    #     'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
-    # },
+    'C8': {
+        'stations': ['MGCB', 'JRBC'], # , 'PHYB', 'SHVB','LCBC', 'GLBC', 'TWBB'
+        'channels': ['HHN', 'HHE', 'HHZ'],
+        'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
+    },
     'PO': {
-        'stations': ['TWKB'], # , SSIB', 'KLNB' 'TSJB', 'SILB', '
+        'stations': ['TSJB', 'SILB', 'SSIB', 'KLNB'], # , 'TWKB'
         'channels': ['HHN', 'HHE', 'HHZ'],
         'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
     }
 }
 
 # Days of data
-date_of_interests = ["20050903","20050904","20050905","20050906","20050907","20050908"]#,
-                      # "20050909","20050910","20050911","20050912","20050913","20050914",
-                      # "20050915","20050916","20050917","20050918","20050919","20050920",
-                      # "20050921","20050922","20050923","20050924","20050925"]
+date_of_interests = ["20050903","20050904","20050905","20050906","20050907","20050908",
+                        "20050909","20050910","20050911","20050912","20050913","20050914",
+                        "20050915","20050916","20050917","20050918","20050919","20050920",
+                        "20050921","20050922","20050923","20050924","20050925"]
 startdate=datetime.strptime(date_of_interests[0], "%Y%m%d")
 enddate=startdate+timedelta(days=len(date_of_interests) - 1)
 lastday=date_of_interests[-1] #For filenames
@@ -61,8 +61,6 @@ lastday=date_of_interests[-1] #For filenames
 freqmin = 1.0
 freqmax = 8.0
 sampling_rate = 40.0
-dt = 1/sampling_rate
-win_size = 50
 
 # Get the streams and preprocess ###actualize the get_traces fct
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
@@ -84,8 +82,10 @@ crosscorr_tools.plot_data(st, pairs, data_plot_filename)
 
 # ========== Plotting Stations ==========
 
-## TO UPDATE TO MORE STATIONS AND NETWORK
-# Plot station locations
-locfile = pd.read_csv('stations.csv')
-locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
-crosscorr_tools.plot_loc(locs, base_dir)
+# =============================================================================
+# ## TO UPDATE TO MORE STATIONS AND NETWORK
+# # Plot station locations
+# locfile = pd.read_csv('stations.csv')
+# locs = locfile[['Name', 'Longitude', 'Latitude','Network']].values
+# crosscorr_tools.plot_loc(locs, base_dir)
+# =============================================================================

@@ -78,9 +78,7 @@ def get_traces(network_config, date_of_interests, base_dir):
                         dt = datetime.strptime(date, '%Y%m%d')
                         julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
                         file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
-                        for i in range(3):
-                            st += read(file)[i]
-                            # print(st.__str__(extended=True))
+                        st += read(file)[:3]
                     else:
                         for cha in channels:
                             file = os.path.join(path, filename_pattern.format(date=date, station=sta, channel=cha))
@@ -88,11 +86,11 @@ def get_traces(network_config, date_of_interests, base_dir):
                             # print(st.__str__(extended=True))
                 except FileNotFoundError:
                     print(f"File not found for {network} network, station {sta}, date {date}.")
-    
+
     # Merge all data by stations and channels
     st.merge(method=1,fill_value='interpolate',interpolation_samples=-1)
     st._cleanup()
-    
+
     return st
 
 def process_data(st, sampling_rate, freqmin, freqmax):
@@ -121,43 +119,43 @@ def process_data(st, sampling_rate, freqmin, freqmax):
             tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
         tr.interpolate(sampling_rate=sampling_rate)
-    
+
     return st
 
 # =============================================================================
-# 
+#
 # def process_streams(st, template_stats, A):
 #     """
 #     Process seismic traces and create a new Stream and a list of station-channel pairs.
-# 
+#
 #     Parameters:
 #         st (obspy.core.Stream): Seismic data streams.
 #         template_stats (dict): Metadata template information.
 #         A (dict): Dictionary containing additional information based on the template.
-# 
+#
 #     Returns:
 #         st2 (obspy.core.Stream): Filtered seismic data streams based on the template.
 #         pairs2 (list): List of pairs corresponding to each trace in st2.
 #     """
 #     starttime = str(template_stats['starttime'])
-# 
+#
 #     # Extract information from the template
 #     templ_info = A[starttime]
 #     stas = templ_info['sta']
-# 
+#
 #     # Filter streams based on station codes
 #     st2 = Stream()
 #     for tr in st:
 #         # Extract station code from trace id
 #         station_code = tr.stats.network + '.' + tr.stats.station
-# 
+#
 #         # Check if the station code is in the list of desired stations
 #         if station_code in stas:
 #             st2 += tr
-# 
+#
 #     # Create a list of station-channel pairs for st2
 #     pairs2 = [f"{tr.stats.station}.{tr.stats.channel}" for tr in st2]
-# 
+#
 #     return st2, pairs2
 # =============================================================================
 
@@ -275,13 +273,12 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.savefig(template_plot_filename)
     plt.close()
 
-def plot_stacks(st, template, newdect, pairs, templ_idx, stack_plot_filename, cpt):
+def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
     Plot the combined traces for a detection and its corresponding template.
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
-        template (obspy.core.Trace): Seismic data trace of the template.
         newdect (numpy.ndarray): Indices of the detected events.
         pairs (list): List of pairs corresponding to each trace in st.
         templ_idx (int): Index of the template.

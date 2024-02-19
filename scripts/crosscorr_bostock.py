@@ -115,7 +115,7 @@ templates.index.name = 'Index'
 # # 1 event per family
 templates=templates.groupby('lfe_family').first().reset_index()
 # # 1 template
-templates=templates.iloc[0:0+1]
+# templates=templates.iloc[0:0+1]
 # templates=templates[1:1+1] # pour OT descending #1256
 # # 1 template every 50
 # templates=templates[::5]
@@ -166,6 +166,11 @@ for idx, template_stats in templates.iterrows():
         elif len(xcorr_template)>len(xcorr_full):
             xcorr_template=xcorr_template[:len(xcorr_full)]
         xcorr_full+=xcorr_template
+        
+        # Check if there are any NaN values ## when doing a lot of days : thresh=nan
+        if np.isnan(xcorr_full).any():
+            print("Array contains NaN values.")
+            nan_indices = np.where(np.isnan(xcorr_full))
 
     # Network cross-correlation
     xcorrmean=xcorr_full/len(st)
@@ -191,7 +196,7 @@ for idx, template_stats in templates.iterrows():
     # If new detections
     if newdect.size > 1:
         cpt=1
-    
+
         # Plot cross-correlation function
         crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                                   folder, name, 'crosscorr1', lastday)
@@ -201,7 +206,7 @@ for idx, template_stats in templates.iterrows():
         # Plot stacked traces
         stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'stack1', lastday)
-        crosscorr_tools.plot_stacks(st, template, newdect, pairs,
+        crosscorr_tools.plot_stacks(st, newdect, pairs, 
                                     templ_idx, stack_plot_filename, cpt)
 
         ## Writing in output.txt
@@ -212,7 +217,7 @@ for idx, template_stats in templates.iterrows():
         # Save the cross-correlation values for each newevent
         cc_values = xcorrmean[newdect]
         #  Write detected events to output file
-        with open(output_file_path, "a", encoding=("utf-8")) as output_file:
+        with open(output_file_path, "a", encoding="utf-8") as output_file:
             if os.stat(output_file_path).st_size == 0:
                 output_file.write("starttime,templ,lfe family,cc value,run\n")
             for i, utc_time in enumerate(utc_times):
@@ -280,18 +285,18 @@ for idx, template_stats in templates.iterrows():
 
                     # Plot stacked traces for new detections
                     stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
-                    crosscorr_tools.plot_stacks(st, template, newdect, pairs,
+                    crosscorr_tools.plot_stacks(st, newdect, pairs,
                                                 templ_idx, stack_plot_filename, cpt=cpt)
 
                     ## Writing in output.txt
                     # Create UTCDateTime objects from the newevent values
                     newevent = newdect*dt
                     utc_times = [startdate + timedelta(seconds=event) for event in newevent]
-                    print("Got {len(utc_times)} new detections with the new templates!")
+                    print(f"Got {len(utc_times)} new detections with the new templates!")
                     # Save the cross-correlation values for each newevent
                     cc_values = xcorrmean[newdect]
                     #  Write the newevent and additional columns to the output file
-                    with open(output_file_path, "a", encoding=("utf-8")) as output_file:
+                    with open(output_file_path, "a", encoding="utf-8") as output_file:
                         for i, utc_time in enumerate(utc_times):
                             output_file.write(
                                 f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
