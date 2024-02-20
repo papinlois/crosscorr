@@ -473,6 +473,8 @@ def correlate_template(data, template, mode='valid', normalize='full',
                 norm = _window_sum(data ** 2, lent)
             norm *= tnorm
             if norm.dtype == float:
+                # TODO: When RunTimeWarning: negative values in norm that gives
+                # nan values in np.sqrt. Something to change?
                 np.sqrt(norm, out=norm)
                 # print(norm)
             else:
