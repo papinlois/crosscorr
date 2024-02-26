@@ -80,7 +80,7 @@ win_size = 8
 
 # Get the streams and preprocess ###actualize the get_traces fct
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
-st = crosscorr_tools.process_data(st, sampling_rate, freqmin, freqmax)
+st = crosscorr_tools.process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax)
 
 # List of stations/channels to analyze
 pairs=[]
@@ -107,24 +107,24 @@ templates['OT'] = templates['date'] + pd.to_timedelta(templates['hour'].astype(i
 templates = templates[(templates['OT'] >= startdate) & (templates['OT'] < enddate)]
 templates = templates.drop(columns=['Mw','hour','second','date'])
 templates = templates.sort_values(by='OT', ascending=True)
-templates = templates.sort_values(by='lfe_family', ascending=False)
-templates = templates.sort_values(by=['lfe_family', 'OT'], ascending=[True, True])
+# templates = templates.sort_values(by='lfe_family', ascending=False)
+# templates = templates.sort_values(by=['lfe_family', 'OT'], ascending=[True, True])
 templates.reset_index(inplace=True)
 templates.index.name = 'Index'
 ## To choose which templates
 # # 1 event per family
 # templates=templates.groupby('lfe_family').first().reset_index()
 # # 1 template
-# templates=templates.iloc[0:0+1]
+templates=templates.iloc[2655:2657+1]
 # templates=templates[1:1+1] # pour OT descending #1256
 # # 1 template every 50
 # templates=templates[::5]
 # # 1 template, 1 event per day
-templates = templates[templates['lfe_family'] == '002']
+# templates = templates[templates['lfe_family'] == '010']
 # templates = templates.groupby(templates['OT'].dt.date).first()
 # templates['Index'] = range(len(templates))
 # templates.set_index('Index', inplace=True)
-templates=templates.iloc[0:0+1]
+# templates=templates.iloc[2:2+1]
 print(templates)
 
 # Collect information
@@ -136,7 +136,7 @@ output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # If you want to reuse the detections as new templates and go through the process again
 reuse_events=True
-num_repeats=9
+num_repeats=2
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -173,7 +173,6 @@ for idx, template_stats in templates.iterrows():
             # The NaN values are coming from the normalization done in
             # the cross-correlation function from obspy. 
             print(f"Trace {tr.id} contains NaN values.")
-            nan_indices = np.where(np.isnan(xcorr_full))
 
     # Network cross-correlation
     xcorrmean=xcorr_full/len(st)

@@ -93,7 +93,7 @@ def get_traces(network_config, date_of_interests, base_dir):
 
     return st
 
-def process_data(st, sampling_rate, freqmin, freqmax):
+def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
     """
     Preprocess seismic data.
 
@@ -107,8 +107,8 @@ def process_data(st, sampling_rate, freqmin, freqmax):
         st (obspy.core.Stream): Seismic data streams.
     """
     # Initialize start and end with values that will be updated
-    starttime = UTCDateTime(st[0].stats.starttime)
-    endtime = UTCDateTime(st[0].stats.endtime)
+    starttime = UTCDateTime(startdate)
+    endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     for tr in st:
@@ -192,7 +192,7 @@ def plot_data(st, pairs, data_plot_filename):
         plt.xlim(0, max(tr.times()))
         plt.ylim(0, len(st[i:i+3]) * nb + nb)
         plt.tight_layout()
-        plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
+        # plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
         plt.show()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
@@ -294,6 +294,8 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
             if end_time > len(tr.data):
                 continue
             waveform_window = tr.data[start_time:end_time]
+            if len(waveform_window) == 0:
+                continue
             max_abs_value = np.max(np.abs(waveform_window))
             normalized_waveform = waveform_window / max_abs_value
             stacked_traces[idx, :] += normalized_waveform
@@ -320,47 +322,49 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.savefig(stack_plot_filename)
     plt.show()
 
-def plot_loc(locs, base_dir, events=None):
-    """
-    Create a plot of station locations and template events on a map.
-
-    Parameters:
-        locs (list): A list of tuples, where each tuple contains station name,
-        longitude, and latitude.
-        base_dir (str): The base directory for file paths.
-        events (DataFrame or None): A DataFrame containing event data with
-        columns 'lon','lat','depth', and 'datetime', or None if no events are provided.
-
-    This function creates a scatter plot of station locations and labels them
-    with station names. If events are provided, the function also plots the
-    events and labels them with 'Events'. The resulting plot is saved as
-    'station_events_locations_{date}.png'.
-
-    Returns:
-        None
-    """
-    plt.figure()
-
-    # Separate stations by network and plot them in different colors
-    for name, lon, lat, network in locs:
-        if network == 'CN':
-            plt.plot(lon, lat, 'bo')
-        elif network == 'PB':
-            plt.plot(lon, lat, 'ro')
-        plt.text(lon, lat, name)
-    title = 'Station Locations'
-    filename = 'station_locations.png'
-
-    # Plot events if provided
-    if events:
-        plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
-        # plt.colorbar(scatter, label='Depth') #c='events['depth']'
-        date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
-        title = f'Station and Events Locations on {date}'
-        filename = 'station_events_locations_{date}.png'
-
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
-    plt.title(title)
-    plt.savefig(os.path.join(base_dir, 'plots', filename))
-    plt.show()
+# =============================================================================
+# def plot_loc(locs, base_dir, events=None):
+#     """
+#     Create a plot of station locations and template events on a map.
+# 
+#     Parameters:
+#         locs (list): A list of tuples, where each tuple contains station name,
+#         longitude, and latitude.
+#         base_dir (str): The base directory for file paths.
+#         events (DataFrame or None): A DataFrame containing event data with
+#         columns 'lon','lat','depth', and 'datetime', or None if no events are provided.
+# 
+#     This function creates a scatter plot of station locations and labels them
+#     with station names. If events are provided, the function also plots the
+#     events and labels them with 'Events'. The resulting plot is saved as
+#     'station_events_locations_{date}.png'.
+# 
+#     Returns:
+#         None
+#     """
+#     plt.figure()
+# 
+#     # Separate stations by network and plot them in different colors
+#     for name, lon, lat, network in locs:
+#         if network == 'CN':
+#             plt.plot(lon, lat, 'bo')
+#         elif network == 'PB':
+#             plt.plot(lon, lat, 'ro')
+#         plt.text(lon, lat, name)
+#     title = 'Station Locations'
+#     filename = 'station_locations.png'
+# 
+#     # Plot events if provided
+#     if events:
+#         plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
+#         # plt.colorbar(scatter, label='Depth') #c='events['depth']'
+#         date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
+#         title = f'Station and Events Locations on {date}'
+#         filename = 'station_events_locations_{date}.png'
+# 
+#     plt.xlabel('Longitude')
+#     plt.ylabel('Latitude')
+#     plt.title(title)
+#     plt.savefig(os.path.join(base_dir, 'plots', filename))
+#     plt.close()
+# =============================================================================
