@@ -29,13 +29,15 @@ To use this seismic data analysis and detection script, follow these steps:
 
 4. Place your seismic data files in MiniSEED format in a directory of your choice. Update the `path` variable in the `crosscorr.py` script to point to the data directory. 
 
-5. Modify the script's configuration variables in `crosscorr.py`:
+5. Modify the network parameters of the stations you want to use in your study in `network_configuration.py`:
 
-   - `stas`: List of station codes to analyze (e.g., `['SNB', 'LZB']`). You can specify the stations you want to include in the analysis.
+   - `stations`: List of station codes to analyze (e.g., `['SNB', 'LZB']`). You can specify the stations you want to include in the analysis.
 
    - `channels`: List of channel codes to read (e.g., `['BHE', 'BHN', 'BHZ']`). Customize the channels to read from your seismic data.
+ 
+   - `filename_pattern`: How is construct the filename of the streams you are going to read (e.g., `'{date}.CN.{station}..{channel}.mseed'`).
 
-   - Adjust other parameters such as filtering options, network code, and the date of interest as needed to suit your specific data and analysis requirements.
+6. Adjust other parameters directly in `crosscorr.py` such as filtering options, network code, and the date of interest as needed to suit your specific data and analysis requirements.
 
 ### Running the Analysis
 
