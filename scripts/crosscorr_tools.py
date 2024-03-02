@@ -79,6 +79,11 @@ def get_traces(network_config, date_of_interests, base_dir):
                         julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
                         file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
                         st += read(file)[:3]
+                    elif sta == 'VGZ':
+                        dt = datetime.strptime(date, '%Y%m%d')
+                        julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
+                        file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
+                        st += read(file)[:3]
                     else:
                         for cha in channels:
                             file = os.path.join(path, filename_pattern.format(date=date, station=sta, channel=cha))
@@ -99,6 +104,8 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
+        startdate (datetime): Beginning of the streams for trimming.
+        enddate (datetime): End of the streams for trimming.
         sampling_rate (float): Sampling rate for interpolation.
         freqmin (float): Minimum frequency for bandpass filtering.
         freqmax (float): Maximum frequency for bandpass filtering.
@@ -111,6 +118,7 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
     endtime = UTCDateTime(enddate)
 
     # Preprocessing: Interpolation, trimming, detrending, and filtering
+    cpt=0
     for tr in st:
         tr.trim(starttime=starttime, endtime=endtime, pad=1,
                 fill_value=0, nearest_sample=False)
@@ -119,6 +127,8 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
             tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
         tr.interpolate(sampling_rate=sampling_rate)
+        cpt+=1
+        print(f'{cpt} out of {len(st)} traces processed (almost there!)')
 
     return st
 
@@ -192,7 +202,7 @@ def plot_data(st, pairs, data_plot_filename):
         plt.xlim(0, max(tr.times()))
         plt.ylim(0, len(st[i:i+3]) * nb + nb)
         plt.tight_layout()
-        # plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
+        plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
         plt.show()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,

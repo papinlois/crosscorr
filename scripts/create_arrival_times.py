@@ -4,7 +4,7 @@
 Created on Thu Jan 25 11:09:14 2024
 
 This script creates a .txt file that relates estimated times for P- and 
-S-waves for each of Bostock LFE families + some figures to show the data.
+S-waves for each of Tim's detections + some figures to show the data.
 
 @author: lpapin
 """
@@ -297,5 +297,5 @@ for template in templates:
     ax.axvline(x=22, color='red', linestyle='--')
 
     # Save figure
-    plt.savefig(base_dir + f'plots/tim/wave_times_template_{template}.png')
+    # plt.savefig(base_dir + f'plots/tim/wave_times_template_{template}.png')
     plt.close()

@@ -26,7 +26,7 @@ import pandas as pd
 from obspy import UTCDateTime
 from scipy.signal import find_peaks
 # from eqcorrscan.utils import findpeaks
-# from network_configurations import network_config
+
 import autocorr_tools
 import crosscorr_tools
 
@@ -42,34 +42,8 @@ folder = "tim"
 # Start timer
 startscript = time.time()
 
-# Define the network configurations # or network_configurations.py with import
-network_config = {
-    'CN1': {
-        'stations': ['LZB', 'PGC', 'SNB'],#, 'NLLB'
-        'channels': ['BHN', 'BHE', 'BHZ'],
-        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
-    },
-    'CN2': {
-        'stations': ['YOUB', 'PFB'],#
-        'channels': ['HHN', 'HHE', 'HHZ'],
-        'filename_pattern': '{date}.CN.{station}..{channel}.mseed'
-    },
-    # 'PB': {
-    #     'stations': ['B001', 'B009', 'B011', 'B010', 'B926'],#
-    #     'channels': ['EH1', 'EH2', 'EHZ'],
-    #     'filename_pattern': '{station}.PB.{year}.{julian_day}'
-    # },
-    # 'C8': {
-    #     'stations': ['MGCB', 'JRBC'],#, 'PHYB', 'SHVB', 'LCBC', 'GLBC', 'TWBB'], #
-    #     'channels': ['HHN', 'HHE', 'HHZ'],
-    #     'filename_pattern': '{date}.C8.{station}..{channel}.mseed'
-    # },
-    # 'PO': {
-    #     'stations': ['SILB', 'SSIB', 'KLNB', 'TSJB'], #, 'TWKB'
-    #     'channels': ['HHN', 'HHE', 'HHZ'],
-    #     'filename_pattern': '{date}.PO.{station}..{channel}.mseed'
-    # }
-}
+# Define the network : CN + PO
+from network_configurations import network_config
 
 # Days of data
 startdate = datetime.strptime("20100504", "%Y%m%d")
@@ -86,7 +60,7 @@ freqmin = 1.0
 freqmax = 8.0
 sampling_rate = 40.0
 dt = 1/sampling_rate
-win_size = 12
+win_size = 8
 
 # Get the streams and preprocess ###actualize the get_traces fct
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
@@ -120,7 +94,7 @@ templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
 templates = templates.sort_values(by='N', ascending=False)
-templates=templates.iloc[0:0+1]#[::3]
+# templates=templates.iloc[0:0+1]#[::3]
 print(templates)
 
 # Which stations detected the events
@@ -146,13 +120,13 @@ for idx, template_stats in templates.iterrows():
     name = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
     # First template is made with the stations that detected the events
-    # st2, pairs2 = crosscorr_tools.process_streams(st, template_stats, A)
-    
+    st2, pairs2 = crosscorr_tools.process_streams(st, template_stats, A)
+
     # Iterate over defined above stations
     for tr in st:
     # for tr in st2:
         # Template data
-        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=8)
+        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=5)
         end_templ = start_templ + timedelta(seconds=win_size)
         # Extract template data for each station
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
@@ -197,17 +171,17 @@ for idx, template_stats in templates.iterrows():
     windowlen = template.stats.npts / 2
     peaks, properties = find_peaks(xcorrmean, height=thresh, distance=windowlen)#, prominence=0.40)
     newdect = peaks
-'''
+
+    cpt=1
+
+    # Plot cross-correlation function
+    crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
+                                                              folder, name, 'crosscorr1', lastday)
+    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
+                                    templ_idx, crosscorr_plot_filename, cpt)
+    
     # If new detections
     if newdect.size > 1:
-        cpt=1
-
-        # Plot cross-correlation function
-        crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
-                                                                  folder, name, 'crosscorr1', lastday)
-        crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
-                                        templ_idx, crosscorr_plot_filename, cpt)
-
         # Plot stacked traces
         stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'stack1', lastday)
@@ -323,4 +297,3 @@ with open(info_file_path, 'w', encoding='utf-8') as file:
     file.write(f"Total of detections: {num_detections} (with redundant times)\n")
     file.write("Templates info:\n")
     file.write(templates.to_string() + '\n')
-'''
