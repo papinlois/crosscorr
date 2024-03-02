@@ -1,6 +1,4 @@
--- To be updated --
-
-# CrossCorr Seismic Data Analysis
+﻿# CrossCorr Seismic Data Analysis
 
 This repository contains Python scripts for analyzing and detecting seismic events in seismic station data using network cross-correlation techniques. The scripts are designed to process and analyze seismic data from multiple stations, perform cross-correlation, and detect significant correlations, which may indicate seismic events. The detected events are then clustered and summarized for further analysis.
 
@@ -56,9 +54,9 @@ The repository will generate various plots, output files, and information about 
 ## Repository Overview
 
 - `crosscorr.py`: The main script for seismic data analysis and detection.
-- `crosscorr_tools.py`: A module containing utility functions for data visualization and processing.
+- `crosscorr_tools.py` and `autocorr_tools.py`: Modules containing utility functions for data visualization and processing.
 - `stations.csv`: A CSV file containing station location information.
-- `EQloc_001_0.1_3_S.txt_withdates`: Data file with earthquake location information.
+- `EQloc_001_0.1_3_S.txt_withdates`: Catalog of our choice for the template matching.
 
 ## Script Overview
 
@@ -66,17 +64,15 @@ This repository contains Python scripts for seismic data analysis and detection 
 
 1. **Data Ingestion**:
    - Reads seismic data from specified files, ensuring you have the right seismic dataset at your disposal.
-
 2. **Data Preprocessing**:
    - Prepares the data by interpolating, trimming, detrending, and filtering for further analysis.
-
 3. **Template Matching**:
    - Loads seismic templates and iterates through these templates and stations to calculate cross-correlations.
-
 4. **Significant Event Detection**:
    - Identifies significant correlations and generates plots to visualize these events.
-
-5. **Output Generation**:
+5. **Iterative Process**:
+	- Stacks the detections for a higher SNR ratio, and continues the cross-correlation with it.
+6. **Output Generation**:
    - Produces informative files and reports containing data about the detected events and the script's execution time.
 
 ## Output
@@ -85,29 +81,18 @@ This repository contains Python scripts for seismic data analysis and detection 
 
 The repository generates a series of plots in the `plots` directory. These plots include:
 
-- `data_plot_<date>.png`: Plots of seismic data for the specified date and stations, with an offset for better visualization.
-
-- `station_events_locations.png`: A map showing the locations of the seismic stations and the event templates used for the cross-correlation.
-
-- `crosscorr_<network>_<channel>_templ<index>_<date>.png`: Cross-correlation plots for detected seismic events, highlighting significant correlations.
-
-- `stack_net<network>_cha<channel>_det<index>.png`: Stack of the traces around detected seismic events, showing the combined signal.
-
-- `stack_vs_templ_net<network>_cha<channel>_templ<template_index>_<date>.png`: Subplots of the stack events with the corresponding template that was used to detect them.
+-  `template_<templ_index>_<date>.png`: Show of the detection and its window on every stations used for computation. 
+-  `crosscorr_<templ_index>_<date>.png`: Cross-correlation plots highlighting significant correlations. 
+- `stack_<templ_index>_<date>.png`: Stack of the new detections made for each station, that will be used as new templates in the process.
 
 ### `output.txt`
 
 The `output.txt` file contains information about detected seismic events. Each line in the file provides the following details:
 
 - `starttime`: The start time of the detected event.
-
 - `templ`: Template index associated with the event.
-
-- `channel`: Channel information.
-
-- `network`: Network code.
-
-- `crosscorr value`: The cross-correlation value for the detected event.
+- `cc value`: The cross-correlation value for the detected event.
+- `run`: The number of the iteration when the detection was made.
 
 ### `info.txt`
 
@@ -125,4 +110,5 @@ The `info.txt` file serves as a summary and information log for the seismic data
 
 This script was crafted by [papin](https://github.com/papin), and it is made available as an open-source tool to advance seismic data analysis. Feel free to adapt and enhance the script to meet your specific research needs. If you encounter questions or require assistance, please don't hesitate to reach out to the author through their GitHub profile for guidance and support.
 
-As of 11/15/2023.
+As of 3/1/2024.
+
