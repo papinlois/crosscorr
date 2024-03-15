@@ -66,6 +66,7 @@ def get_traces(network_config, date_of_interests, base_dir):
     path = os.path.join(base_dir, 'data', 'seed')
     st = Stream()
 
+    # TODO: Change the reading part so it just gets any streams with the station name
     # Read all the files corresping to the stations defined in network_config
     for date in date_of_interests:
         for network, config in network_config.items():
@@ -87,13 +88,13 @@ def get_traces(network_config, date_of_interests, base_dir):
                     else:
                         for cha in channels:
                             file = os.path.join(path, filename_pattern.format(date=date, station=sta, channel=cha))
-                            st += read(file)[0]
-                            # print(st.__str__(extended=True))
+                            st += read(file)
                 except FileNotFoundError:
                     print(f"File not found for {network} network, station {sta}, date {date}.")
 
     # Merge all data by stations and channels
-    st.merge(method=1,fill_value='interpolate',interpolation_samples=-1)
+    st.merge(method=0, fill_value=0)
+    # st.merge(method=1,fill_value='interpolate',interpolation_samples=-1)
     st._cleanup()
 
     return st
@@ -120,9 +121,9 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
     # Preprocessing: Interpolation, trimming, detrending, and filtering
     cpt=0
     for tr in st:
+        tr.detrend('linear')
         tr.trim(starttime=starttime, endtime=endtime, pad=1,
                 fill_value=0, nearest_sample=False)
-
         if tr.stats.sampling_rate != 100.0:
             tr.interpolate(sampling_rate=100.0, starttime=starttime, endtime=endtime)
         tr.filter("bandpass", freqmin=freqmin, freqmax=freqmax)
@@ -166,6 +167,51 @@ def process_streams(st, template_stats, A):
 
     return st2, pairs2
 
+# ========== Process Data ==========
+
+def check_xcorr(xcorr_template, mask):
+    """
+    Check the cross-correlation values of a template and update a mask accordingly.
+
+    Parameters:
+        xcorr_template (numpy.ndarray): The cross-correlation values of the template.
+        mask (numpy.ndarray): An array used to track problematic values.
+
+    Returns:
+        xcorr_template: The updated cross-correlation values.
+        mask: The updated mask array.
+
+    If the `xcorr_template` contains NaN values, they are replaced with zeros using `np.nan_to_num`.
+    Then, the function identifies non-zero elements in `xcorr_template` and updates 
+    the corresponding positions in the `mask` array by incrementing their values by 1.
+
+    Examples:
+    >>> template = np.array([0.5, 0.3, np.nan, 0.2])
+    >>> mask = np.zeros(len(template))
+    >>> check_xcorr(template, mask)
+    (array([0.5, 0.3, 0. , 0.2]), array([1., 1., 0., 1.]))
+    """
+    if np.isnan(xcorr_template).any():
+        xcorr_template = np.nan_to_num(xcorr_template)
+        idx = np.where(xcorr_template!=0) #>=0.00001
+        mask[idx]+=1
+    else:
+        mask+=1
+    return xcorr_template, mask
+
+def check_data(data):
+    """
+    Check the quality of waveform data.
+    Returns True if the waveform data passes all the checks, otherwise False.
+    """
+    if len(data) == 0:
+        return False
+    if np.any(np.isnan(data)):
+        return False
+    if np.max(np.abs(data)) == 0:
+        return False
+    return True
+
 # ========== All Types of Plots ==========
 
 def plot_data(st, pairs, data_plot_filename):
@@ -206,7 +252,7 @@ def plot_data(st, pairs, data_plot_filename):
         plt.show()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
-                   crosscorr_plot_filename, cpt):
+                   crosscorr_plot_filename, cpt, mask=False):
     """
     Plots cross-correlation data and saves the plot to a file.
 
@@ -222,26 +268,42 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
     Returns:
         None
     """
+    # Simple crosscorr function
     tr=st[0]
     stream_duration = tr.stats.endtime - tr.stats.starttime
     _, ax = plt.subplots(figsize=(10, 4))
-
     ax.plot(tr.stats.delta * np.arange(len(xcorrmean)), xcorrmean)
     ax.axhline(thresh, color='red')
     ax.plot(newdect * tr.stats.delta, xcorrmean[newdect], 'kx')
-    # ax.plot((newdect * tr.stats.delta)[max_index],
-    #         (xcorrmean[newdect])[max_index], 'gx', markersize=10, linewidth=10)
-    # ax.text(60, 1.1 * thresh, '8*MAD', fontsize=14, color='red')
     ax.set_xlabel('Time (s)', fontsize=14)
     ax.set_ylabel('Correlation Coefficient', fontsize=14)
     ax.set_xlim(0, stream_duration)
-    # ax.set_xlim(10000, 12000)
-    # ax.set_ylim(0, 0.6)
     ax.set_title(f'Cross-correlation Function for Template {templ_idx} - Iteration {cpt}', fontsize=16)
     plt.gcf().subplots_adjust(bottom=0.2)
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    plt.show()
+    plt.close()
+    
+    # Plot cross-correlation with mask
+    if np.any(mask):
+        tr = st[0]
+        stream_duration = tr.stats.endtime - tr.stats.starttime
+        _, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(tr.stats.delta * np.arange(len(xcorrmean)), xcorrmean, label='Cross-correlation')
+        ax.axhline(thresh, color='red', label='Threshold')
+        ax.plot(newdect * tr.stats.delta, xcorrmean[newdect], 'kx', label='Detected events')
+        ax_mask = ax.twinx()
+        ax_mask.plot(tr.stats.delta * np.arange(len(mask)), mask, color='green', label='Mask')
+        ax_mask.set_ylabel('Mask Value', fontsize=14)
+        ax.set_xlabel('Time (s)', fontsize=14)
+        ax.set_ylabel('Correlation Coefficient', fontsize=14)
+        ax.set_xlim(0, stream_duration)
+        ax.set_title(f'Cross-correlation Function for Template {templ_idx} - Iteration {cpt}', fontsize=16)
+        lines, labels = ax.get_legend_handles_labels()
+        lines_mask, labels_mask = ax_mask.get_legend_handles_labels()
+        ax.legend(lines + lines_mask, labels + labels_mask, loc='upper right')
+        plt.tight_layout()
+        plt.show()
 
 def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
@@ -257,18 +319,18 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     Returns:
         None
     """
+    # Plot each template with an offset on the y-axis
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(all_template) * nb
     x = np.linspace(0, len(all_template[0]) / st[0].stats.sampling_rate,
                     len(all_template[0]), endpoint=False)
-
-    # Plot each template with an offset on the y-axis
-    for _, (template, pair) in enumerate(zip(all_template, pairs)):
+    for template, pair in zip(all_template, pairs):
+        if not check_data(template.data):
+            continue
         norm = np.max(np.abs(template.data))
-        plt.plot(x, template / norm + offset, label=f'{pair}')
+        plt.plot(x, template.data / norm + offset, label=f'{pair}')
         offset -= nb
-
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'All Templates for Template {templ_idx}', fontsize=16)
@@ -282,7 +344,8 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
 
 def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
-    Plot the combined traces for a detection and its corresponding template.
+    Plot the combined traces of the detections of the template. Then will be
+    used as new templates.
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
@@ -295,42 +358,46 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     Returns:
         None
     """
-    stacked_traces = np.zeros((len(st), int(55 * st[0].stats.sampling_rate)))
+    # Stacking process
+    stacked_traces = np.zeros((len(st), int(30 * st[0].stats.sampling_rate)))
     for idx, tr in enumerate(st):
+        cptwave=0 # Number of waveforms we don't stack bc of value issues
         for dect in newdect:
             # Normalize each waveform by its maximum absolute amplitude
-            start_time = dect - int(5 * tr.stats.sampling_rate) # Start from the detection point
-            end_time = dect + int(50 * tr.stats.sampling_rate)  # 30-second window
+            start_time = dect #- int(5 * tr.stats.sampling_rate)
+            end_time = dect + int(30 * tr.stats.sampling_rate)
             if end_time > len(tr.data):
                 continue
             waveform_window = tr.data[start_time:end_time]
-            if len(waveform_window) == 0:
+            if not check_data(waveform_window):
+                cptwave += 1
                 continue
             max_abs_value = np.max(np.abs(waveform_window))
             normalized_waveform = waveform_window / max_abs_value
             stacked_traces[idx, :] += normalized_waveform
-    stacked_traces /= len(newdect)
-
+    stacked_traces /= len(newdect-cptwave)
+    
+    # Plot each stack with an offset on the y-axis
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(-5, 50, len(stacked_traces[0, :]), endpoint=False)
-
+    x = np.linspace(0, 30, len(stacked_traces[0, :]), endpoint=False)
     for i in range(len(stacked_traces)):
-        norm = np.max(np.abs(stacked_traces[i,:]))
-        plt.plot(x, stacked_traces[i, :] / norm + offset, label=f'{pairs[i]}')
+        norm = np.max(np.abs(stacked_traces[i,:])) # Same weight for each stack on the figure
+        plt.plot(x, stacked_traces[i,:]/norm+offset, label=f'{pairs[i]}')
         offset -= nb
-
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt}', fontsize=16)
-    plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
-    plt.xlim(-5, 20)
-    plt.ylim(0, len(pairs) * nb + nb)
+    plt.yticks(np.arange(len(pairs))*nb+nb, pairs[::-1], fontsize=12)
+    plt.xlim(0, 30)
+    plt.ylim(0, len(pairs)*nb+nb)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(stack_plot_filename)
     plt.show()
+    
+    return stacked_traces
 
 # =============================================================================
 # def plot_loc(locs, base_dir, events=None):

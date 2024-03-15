@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 # import warnings
 import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from obspy import UTCDateTime
 from scipy.signal import find_peaks
 # from eqcorrscan.utils import findpeaks
@@ -43,7 +43,7 @@ folder = "tim"
 startscript = time.time()
 
 # Define the network : CN + PO
-from network_configurations import network_config
+from network_configurations_test import network_config
 
 # Days of data
 startdate = datetime.strptime("20100504", "%Y%m%d")
@@ -60,11 +60,12 @@ freqmin = 1.0
 freqmax = 8.0
 sampling_rate = 40.0
 dt = 1/sampling_rate
-win_size = 8
+win_size = 30
 
 # Get the streams and preprocess ###actualize the get_traces fct
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
 st = crosscorr_tools.process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax)
+print(st.__str__(extended=True))
 
 # List of stations/channels to analyze
 pairs=[]
@@ -74,7 +75,7 @@ for tr in st:
     pairs.append(identifier)
 
 # Remove the bad data
-tr_remove = ['PGC..BHE', 'SNB..BHE', 'B010..EH2', 'B010..EHZ']
+tr_remove = ['PGC..BHE', 'SNB..BHE', 'YOUB..HZ']
 idx_remove = [i for i, tr in enumerate(st)
               if tr.stats.station + '..' + tr.stats.channel in tr_remove]
 if idx_remove:
@@ -94,7 +95,8 @@ templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
 templates = templates.sort_values(by='N', ascending=False)
-# templates=templates.iloc[0:0+1]#[::3]
+templates=templates.iloc[0:20+1]#[::3]
+templates=templates.iloc[13:13+1]#[::3]
 print(templates)
 
 # Which stations detected the events
@@ -109,24 +111,26 @@ output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # If you want to reuse the detections as new templates and go through the process again
 reuse_events=True
-num_repeats=2
+num_repeats=5
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
     # Initialization
     template=[]
     all_template=[]
+    all_xcorr=[]
     templ_idx=idx
     name = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
-    # First template is made with the stations that detected the events
+    mask=np.zeros(len(xcorr_full))
+    
+    # First template is made of the stations that detected the events
     st2, pairs2 = crosscorr_tools.process_streams(st, template_stats, A)
-
+    for tr in st2:
     # Iterate over defined above stations
-    for tr in st:
-    # for tr in st2:
+    # for tr in st:
         # Template data
-        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=5)
+        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=10)
         end_templ = start_templ + timedelta(seconds=win_size)
         # Extract template data for each station
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
@@ -139,29 +143,22 @@ for idx, template_stats in templates.iterrows():
         # Ensure equal length for cross-correlation arrays
         if len(xcorr_template)<len(xcorr_full):
             xcorr_full=xcorr_full[:len(xcorr_template)]
+            mask=mask[:len(xcorr_template)]
         elif len(xcorr_template)>len(xcorr_full):
             xcorr_template=xcorr_template[:len(xcorr_full)]
+            mask=mask[:len(xcorr_full)]
+        # Check if there are any NaN values and make it 0
+        xcorr_template, mask = crosscorr_tools.check_xcorr(xcorr_template,mask)
         xcorr_full+=xcorr_template
-        
-        # Check if there are any NaN values
-        if np.isnan(xcorr_full).any():
-            # The NaN values are coming from the normalization done in
-            # the cross-correlation function from obspy. 
-            print(f"Trace {tr.id} contains NaN values.")
-
-    # Network cross-correlation
-    xcorrmean=xcorr_full/len(st)
-    # xcorrmean=xcorr_full/len(st2)
-
-    # If it goes over the next day, template not defined and end of the run
-    if not all_template:
-        break
 
     # Plot template time window on each station-channel combination
     template_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'template1', lastday)
-    crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
-    # crosscorr_tools.plot_template(st2, all_template, pairs2, templ_idx, template_plot_filename)
+    # crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
+    crosscorr_tools.plot_template(st2, all_template, pairs2, templ_idx, template_plot_filename)
+
+    # Average cross-correlation
+    xcorrmean=xcorr_full/mask
 
     # Find indices where the cross-correlation values are above the threshold
     mad = np.nanmedian(np.abs(xcorrmean - np.nanmedian(xcorrmean)))
@@ -173,37 +170,23 @@ for idx, template_stats in templates.iterrows():
     newdect = peaks
 
     cpt=1
-
     # Plot cross-correlation function
     crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'crosscorr1', lastday)
-    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
-                                    templ_idx, crosscorr_plot_filename, cpt)
-    
+    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx, 
+                                    crosscorr_plot_filename, cpt, mask=mask)
+
     # If new detections
     if newdect.size > 1:
         # Plot stacked traces
         stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'stack1', lastday)
-        crosscorr_tools.plot_stacks(st, newdect, pairs, 
-                                    templ_idx, stack_plot_filename, cpt)
+        stacked_traces = crosscorr_tools.plot_stacks(st, newdect, pairs,
+                                                     templ_idx, stack_plot_filename, cpt)
 
-        ## Writing in output.txt
         # Create UTCDateTime objects from the newevent values
         newevent = newdect*dt
         utc_times = [startdate + timedelta(seconds=event) for event in newevent]
-        num_detections+=newevent.size
-        # Save the cross-correlation values for each newevent
-        cc_values = xcorrmean[newdect]
-        #  Write detected events to output file
-        with open(output_file_path, "a", encoding="utf-8") as output_file:
-            if os.stat(output_file_path).st_size == 0:
-                output_file.write("starttime,templ,cc value,run\n")
-            for i, utc_time in enumerate(utc_times):
-                output_file.write(
-                    f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
-                    f"{templ_idx},{cc_values[i]:.4f},1\n"
-                )
 
         # Reuse detected events as templates by stacking
         print(f"Got {len(utc_times)} detections so let's reuse them as templates by stacking them!")
@@ -213,36 +196,27 @@ for idx, template_stats in templates.iterrows():
             # Plot new templates, cross-correlation, and new detections
             if reuse_events:
                 xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
-                stacked_templ = np.zeros((len(st),int(win_size*sampling_rate+1)))
-                # Create stacked templates (1 template = stacked new detections)
+                mask=np.zeros(len(xcorr_full))
+                # Iterate over all stations
                 for idx, tr in enumerate(st):
-                    # Template data
-                    for utc_time in utc_times:
-                        start_templ=UTCDateTime(utc_time)
-                        end_templ = start_templ + timedelta(seconds=win_size)
-                        # Extract template data for each station
-                        template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
-                        # Normalize the template waveform
-                        max_amplitude = np.max(np.abs(template.data))
-                        if max_amplitude != 0:
-                            template.data /= max_amplitude
-                        # Add the normalized template to the stacked trace
-                        stacked_templ[idx, :] += template.data
-
-                    # Cross-correlate stacked template with station data
+                    # Cross-correlation function with the stacks
                     xcorr_template = autocorr_tools.correlate_template(
-                        tr.data, stacked_templ[idx,:],
+                        tr.data, stacked_traces[idx,:],
                         mode='valid', normalize='full', demean=True, method='auto'
                     )
                     # Ensure equal length for cross-correlation arrays
                     if len(xcorr_template)<len(xcorr_full):
                         xcorr_full=xcorr_full[:len(xcorr_template)]
+                        mask=mask[:len(xcorr_template)]
                     elif len(xcorr_template)>len(xcorr_full):
                         xcorr_template=xcorr_template[:len(xcorr_full)]
+                        mask=mask[:len(xcorr_full)]
+                    # Check if there are any NaN values and make it 0
+                    xcorr_template, mask = crosscorr_tools.check_xcorr(xcorr_template,mask)
                     xcorr_full+=xcorr_template
 
-                # Calculate mean cross-correlation
-                xcorrmean=xcorr_full/len(st)
+                # Average cross-correlation
+                xcorrmean=xcorr_full/mask
 
                 # Find indices where the cross-correlation values are above the threshold
                 mad = np.nanmedian(np.abs(xcorrmean - np.nanmedian(xcorrmean)))
@@ -256,28 +230,33 @@ for idx, template_stats in templates.iterrows():
                 if newdect.size > 1:
                     # Plot cross-correlation function for new detections
                     crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'crosscorr{cpt}', lastday)
-                    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
-                                                    templ_idx, crosscorr_plot_filename, cpt)
+                    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx, 
+                                                    crosscorr_plot_filename, cpt, mask=mask)
 
                     # Plot stacked traces for new detections
                     stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
-                    crosscorr_tools.plot_stacks(st, newdect, pairs,
+                    stacked_traces = crosscorr_tools.plot_stacks(st, newdect, pairs,
                                                 templ_idx, stack_plot_filename, cpt=cpt)
-
-                    ## Writing in output.txt
+                    
                     # Create UTCDateTime objects from the newevent values
                     newevent = newdect*dt
                     utc_times = [startdate + timedelta(seconds=event) for event in newevent]
                     print(f"Got {len(utc_times)} new detections with the new templates!")
-                    # Save the cross-correlation values for each newevent
-                    cc_values = xcorrmean[newdect]
-                    #  Write the newevent and additional columns to the output file
-                    with open(output_file_path, "a", encoding="utf-8") as output_file:
-                        for i, utc_time in enumerate(utc_times):
-                            output_file.write(
-                                f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
-                                f"{templ_idx},{cc_values[i]:.4f},1\n"
-                            )
+    
+    ## Writing in output.txt
+    # Create UTCDateTime objects from the newevent values
+    newevent = newdect*dt
+    utc_times = [startdate + timedelta(seconds=event) for event in newevent]
+    print(f"Total of {len(utc_times)} new detections for template {templ_idx}.")
+    # Save the cross-correlation values for each newevent
+    cc_values = xcorrmean[newdect]
+    #  Write the newevent and additional columns to the output file
+    with open(output_file_path, "a", encoding="utf-8") as output_file:
+        for i, utc_time in enumerate(utc_times):
+            output_file.write(
+                f"{UTCDateTime(utc_time).strftime('%Y-%m-%dT%H:%M:%S.%f')},"
+                f"{templ_idx},{cc_values[i]:.4f},1\n"
+            )
 
     # Follow the advancement
     print(f"Processed template {templ_idx + 1}/{len(templates)}")
