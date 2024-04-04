@@ -4,14 +4,19 @@
 Created on Fri Feb  2 13:10:18 2024
 
 @author: lpapin
+
+Script made to quickly plot the streams of the data and the events of a map, 
+either for Bostock LFE families or Tim's detections.
+
+As of 04/04/24.
 """
 
 import os
 import csv
-import cartopy.crs as ccrs
-import pandas as pd
 import time
 from datetime import datetime, timedelta
+import cartopy.crs as ccrs
+import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -131,19 +136,25 @@ for i, network in enumerate(unique_networks):
     network_indices = [j for j, net in enumerate(networks) if net == network]
     network_latitudes = [latitudes[k] for k in network_indices]
     network_longitudes = [longitudes[k] for k in network_indices]
-    plt.scatter(network_longitudes, network_latitudes, 
+    plt.scatter(network_longitudes, network_latitudes,
                 color=color_map(i), marker='v', s=150) #, label=network
 
 # Indices to include from stations list
-indices_to_include = [0, 10, 11, 12, 13, 14, 15, 16, -4, -3, -2, -1]
-networks_to_plot = [networks[i] for i in indices_to_include]
-stations_to_plot = [stations[i] for i in indices_to_include]
-latitudes_to_plot = [latitudes[i] for i in indices_to_include]
-longitudes_to_plot = [longitudes[i] for i in indices_to_include]
-for i, network in enumerate(unique_networks):
-    plt.scatter(longitudes_to_plot, latitudes_to_plot, color='k', marker='v', s=150)
-    plt.title('Choosen stations for May 2010', fontsize=16)
-for i, (lon, lat, station) in enumerate(zip(longitudes_to_plot, latitudes_to_plot, stations_to_plot)):
+# indices_to_include = [0, 10, 11, 12, 13, 14, 15, 16, -4, -3, -2, -1]
+indices_to_include = [10, 13, 14, 15, 25]
+# indices_to_include=[]
+if indices_to_include:
+    networks_to_plot = [networks[i] for i in indices_to_include]
+    stations_to_plot = [stations[i] for i in indices_to_include]
+    latitudes_to_plot = [latitudes[i] for i in indices_to_include]
+    longitudes_to_plot = [longitudes[i] for i in indices_to_include]
+    for i, network in enumerate(unique_networks):
+        plt.scatter(longitudes_to_plot, latitudes_to_plot, color='k', marker='v', s=150)
+        plt.title('Choosen stations for May 2010', fontsize=16)
+    for i, (lon, lat, station) in enumerate(zip(longitudes_to_plot, latitudes_to_plot, stations_to_plot)):
+        plt.text(lon, lat, station, fontsize=10, ha='center', va='bottom', rotation=45)
+
+for i, (lon, lat, station) in enumerate(zip(longitudes, latitudes, stations)):
     plt.text(lon, lat, station, fontsize=10, ha='center', va='bottom', rotation=45)
 
 ##Tim
@@ -159,8 +170,8 @@ templates = templates[(templates['OT'] >= startdate)
 templates = templates.drop(columns=['dates', 'residual', 'starttime','dt'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
-templates = templates.sort_values(by='N', ascending=False)
-templates = templates[0:20+1]
+# templates = templates.sort_values(by='N', ascending=False)
+templates = templates[2226:2238+1]
 # templates=templates.iloc[0:0+1]#[::3]
 print(templates)
 
@@ -172,7 +183,7 @@ plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
 # sc = plt.scatter(events['lon'], events['lat'], c=templates['OT'], cmap=cmap, marker='x', label='Events')
 # cbar = plt.colorbar(sc)
 plt.xlabel('Longitude', fontsize=14)
-plt.ylabel('Latitude', fontsize=14) 
+plt.ylabel('Latitude', fontsize=14)
 for index, event in events.iterrows():
     plt.annotate(index, (event['lon'], event['lat']), textcoords="offset points", xytext=(0,10), ha='center')
 plt.legend()
@@ -180,11 +191,31 @@ plt.grid(True)
 plt.show()
 
 '''
+# Load LFE data on Bostock's catalog
+startdate = datetime.strptime("20050903", "%Y%m%d")
+enddate = datetime.strptime("20050925", "%Y%m%d")
+templates = pd.read_csv('lfe_svi.txt', index_col=0, dtype={'date': str, 'hour': str, 'lfe_family':str})
+templates['date'] = '20' + templates['date']
+templates['date'] = pd.to_datetime(templates['date'], format='%Y%m%d')
+templates['hour'] = templates['hour'].str.zfill(2)
+templates['OT'] = templates['date'] + pd.to_timedelta(templates['hour'].astype(int), unit='h') + pd.to_timedelta(templates['second'], unit='s')
+templates = templates[(templates['OT'] >= startdate) & (templates['OT'] < enddate)]
+templates = templates.drop(columns=['hour','second','date'])
+templates = templates.sort_values(by='OT', ascending=True)
+templates.reset_index(inplace=True)
+templates.index.name = 'Index'
+templates=templates[::1000]
+templates=templates[3:3+1]
+print(templates)
+# templates=templates.groupby('lfe_family').first().reset_index()
+# templates=templates[::5]
+
 ## Bostock
 # Load LFE family data
 sav_family_phases = np.load('./sav_family_phases.npy', allow_pickle=True).item()
 family_nb = np.array(list(sav_family_phases.keys()))
-family_nb = family_nb[family_nb == '052']
+# family_nb = family_nb[family_nb == '041']
+family_nb = [value for value in family_nb if value in set(templates['lfe_family'])]
 
 # Iterate through LFE families
 for nb in family_nb:
@@ -193,6 +224,7 @@ for nb in family_nb:
     lon_family = lon_family * -1
     plt.scatter(lon_family, lat_family, color='grey', s=75)
     plt.text(lon_family, lat_family, nb, fontsize=10, ha='left')
+
 
 # Set the limits of the plot
 plt.xlim(-124.5, -123)

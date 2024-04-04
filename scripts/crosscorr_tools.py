@@ -30,7 +30,7 @@ Functions:
 
 @author: papin
 
-As of 15/03/24.
+As of 04/04/24.
 """
 
 import os
@@ -101,7 +101,6 @@ def get_traces(network_config, date_of_interests, base_dir):
 
     # Merge all data by stations and channels
     st.merge(method=0, fill_value=0)
-    # st.merge(method=1,fill_value='interpolate',interpolation_samples=-1)
     st._cleanup()
 
     return st
@@ -143,7 +142,8 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
 def process_streams(st, template_stats, A):
     """
     Process seismic traces and create a new Stream and a list of station-channel pairs.
-
+    It gets which stations detected the event and filter st to keep only those ones.
+    
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
         template_stats (dict): Metadata template information.
@@ -259,11 +259,11 @@ def check_peak_frequency(all_template, sampling_rate=40, frequency_range=(1, 8))
         condition_met (bool): False if the condition is met for any trace, 
         True otherwise.
         
-    NB: Used in the stacking of the new detections for now.
+    NB: Possibly can be used in the process so keeping it for now.
     """
     start_freq, stop_freq = frequency_range
     num_traces = len(all_template)
-    condition_met = True  
+    condition_met = True
     # fig, ax = plt.subplots(figsize=(10, 6))
     for i in range(num_traces):
         # Execute the FFT on the data
@@ -288,7 +288,7 @@ def check_peak_frequency(all_template, sampling_rate=40, frequency_range=(1, 8))
     # ax.set_title('Amplitude Spectrum of Normalized Seismic Signals')
     # # ax.legend()
     # plt.grid(True)
-    # plt.show()        
+    # plt.show()
 
     return condition_met
 
@@ -329,7 +329,7 @@ def plot_data(st, pairs, data_plot_filename):
         plt.ylim(0, len(st[i:i+3]) * nb + nb)
         plt.tight_layout()
         plt.savefig(f"{data_plot_filename}_{tr.stats.station}.png")
-        plt.close()
+        plt.show()
 
 def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
                    crosscorr_plot_filename, cpt, mask=False):
@@ -354,7 +354,7 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
     ax.plot(tr.stats.delta * np.arange(len(xcorrmean)), xcorrmean, label='Cross-correlation')
     ax.axhline(thresh, color='red', label='Threshold')
     ax.plot(newdect * tr.stats.delta, xcorrmean[newdect], 'kx', label='Detected events')
-    
+
     if np.any(mask):
         ax_mask = ax.twinx()
         ax_mask.plot(tr.stats.delta * np.arange(len(mask)), mask, color='green', label='Mask')
@@ -364,20 +364,19 @@ def plot_crosscorr(st, xcorrmean, thresh, newdect, templ_idx,
     ax.set_ylabel('Correlation Coefficient', fontsize=14)
     ax.set_xlim(0, stream_duration)
     ax.set_title(f'Cross-correlation Function for Template {templ_idx} - Iteration {cpt}', fontsize=16)
-    lines, labels = ax.get_legend_handles_labels()
-    if np.any(mask):
-        lines_mask, labels_mask = ax_mask.get_legend_handles_labels()
-        ax.legend(lines + lines_mask, labels + labels_mask, loc='upper right')
-    else:
-        ax.legend(lines, labels, loc='upper right')
-    
+    # lines, labels = ax.get_legend_handles_labels()
+    # if np.any(mask):
+        # lines_mask, labels_mask = ax_mask.get_legend_handles_labels()
+        # ax.legend(lines + lines_mask, labels + labels_mask, loc='upper right')
+    # else:
+        # ax.legend(lines, labels, loc='upper right')
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename)
-    plt.close()
+    plt.show()
 
 def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     """
-    Plot templates with an offset on the y-axis.
+    Plot normalized templates with an offset on the y-axis.
 
     Parameters:
         st (obspy.core.Stream): Seismic data streams.
@@ -410,7 +409,7 @@ def plot_template(st, all_template, pairs, templ_idx, template_plot_filename):
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(template_plot_filename)
-    plt.close()
+    plt.show()
 
 def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     """
@@ -429,26 +428,19 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
         None
     """
     # Stacking process
-    stacked_traces = np.zeros((len(st), int(30 * st[0].stats.sampling_rate)))
+    stacked_traces = np.zeros((len(st), int(40 * st[0].stats.sampling_rate)))
     cptttt=0
     for idx, tr in enumerate(st):
         cptwave=0 # Number of waveforms we don't stack bc of value issues
         all_waveform=[]
         for dect in newdect:
             # Normalize each waveform by its maximum absolute amplitude
-            start_time = dect - int(10 * tr.stats.sampling_rate)
-            end_time = dect + int(20 * tr.stats.sampling_rate)
+            start_time = dect - int(5 * tr.stats.sampling_rate)
+            end_time = dect + int(35 * tr.stats.sampling_rate)
             if end_time > len(tr.data):
                 continue
             waveform_window = tr.data[start_time:end_time]
             cptttt+=1
-            # plt.figure()  # Create a new figure for each waveform window
-            # plt.plot(waveform_window)
-            # plt.xlabel('Time (s)')
-            # plt.ylabel('Amplitude')
-            # plt.title(f'Waveform Window {cptttt+1}')
-            # # plt.savefig(f'waveform_window_{cptttt}')
-            # plt.close()
             if not check_data(waveform_window):
                 cptwave += 1
                 continue
@@ -457,12 +449,12 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
             stacked_traces[idx, :] += normalized_waveform
             all_waveform.append(normalized_waveform)
     stacked_traces /= len(newdect-cptwave)
-    
+
     # Plot each stack with an offset on the y-axis
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, 30, len(stacked_traces[0, :]), endpoint=False)
+    x = np.linspace(0, 40, len(stacked_traces[0, :]), endpoint=False)
     for i in range(len(stacked_traces)):
         norm = np.max(np.abs(stacked_traces[i,:])) # Same weight for each stack on the figure
         plt.plot(x, stacked_traces[i,:]/norm+offset, label=f'{pairs[i]}')
@@ -471,13 +463,14 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx} - Iteration {cpt} - {len(newdect)} detections', fontsize=16)
     plt.yticks(np.arange(len(pairs))*nb+nb, pairs[::-1], fontsize=12)
-    # plt.xlim(0, 30)
+    plt.xticks([0,5,10,15,20,25,30,35,40],[-5,0,5,10,15,20,25,30,35])
     plt.ylim(0, len(pairs)*nb+nb)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig(stack_plot_filename)
-    plt.close()
-    
+    plt.savefig(stack_plot_filename, dpi=600)
+    plt.show()
+
     return stacked_traces
 
 # ========== Old functions that can be reused ==========
@@ -486,24 +479,24 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 # def plot_loc(locs, base_dir, events=None):
 #     """
 #     Create a plot of station locations and template events on a map.
-# 
+#
 #     Parameters:
 #         locs (list): A list of tuples, where each tuple contains station name,
 #         longitude, and latitude.
 #         base_dir (str): The base directory for file paths.
 #         events (DataFrame or None): A DataFrame containing event data with
 #         columns 'lon','lat','depth', and 'datetime', or None if no events are provided.
-# 
+#
 #     This function creates a scatter plot of station locations and labels them
 #     with station names. If events are provided, the function also plots the
 #     events and labels them with 'Events'. The resulting plot is saved as
 #     'station_events_locations_{date}.png'.
-# 
+#
 #     Returns:
 #         None
 #     """
 #     plt.figure()
-# 
+#
 #     # Separate stations by network and plot them in different colors
 #     for name, lon, lat, network in locs:
 #         if network == 'CN':
@@ -513,7 +506,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 #         plt.text(lon, lat, name)
 #     title = 'Station Locations'
 #     filename = 'station_locations.png'
-# 
+#
 #     # Plot events if provided
 #     if events:
 #         plt.scatter(events['lon'], events['lat'], c='grey', marker='x', label='Events')
@@ -521,7 +514,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 #         date=(UTCDateTime(events['datetime'][0]).date).strftime('%Y%m%d')
 #         title = f'Station and Events Locations on {date}'
 #         filename = 'station_events_locations_{date}.png'
-# 
+#
 #     plt.xlabel('Longitude')
 #     plt.ylabel('Latitude')
 #     plt.title(title)
