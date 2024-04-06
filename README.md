@@ -1,4 +1,4 @@
-﻿# CrossCorr Seismic Data Analysis
+# CrossCorr Seismic Data Analysis
 
 This repository contains Python scripts for analyzing and detecting seismic events in seismic station data using network cross-correlation techniques. The scripts are designed to process and analyze seismic data from multiple stations, perform cross-correlation, and detect significant correlations, which may indicate seismic events. The detected events are then clustered and summarized for further analysis.
 
@@ -59,6 +59,7 @@ The repository will generate various plots, output files, and information about 
 - `network_configurations.py`: A dictionary of all the stations with their channels and filename paths. Imported as a module in the main script of cross-correlation.
 - `EQloc_001_0.1_3_S.txt_withdates`: Catalog of our choice for the template matching (used in `crosscorr.py`).
 - `create_arrival_times.py` and `create_arrival_times_bostock.py`: Scripts that creates all P- and S-waves arrival times for the selected catalog (`arrival_times_tim.txt` and `arrival_times_bostock.txt`). It also plots different figures to have an idea of the times for selected stations.
+- `events_study.py`: Allows to see the different characteristics of a choosen period of time (repartition of latitude, longitude, depth, and daily rate).
 
 ## Script Overview
 
