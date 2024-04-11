@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct 16 14:48:37 2023
@@ -7,33 +8,37 @@ The functions cover loading and preprocessing data, plotting seismic traces, cre
 summed traces around detected events, and more.
 
 Functions:
-- build_file_path: Gives file names for plots.
-- get_traces: Load seismic data for specified stations, channels, and date.
+- build_file_path: Generates file names for plots.
+- get_traces: Loads seismic data for specified stations, channels, and date.
 - process_data: Preprocess seismic data, including interpolation, trimming,
   detrending, and filtering.
-- process_streams: Filter the seismic traces for the first templates.
-- check_length: Matchs the length of variables for traces with different
-  number of samples (usually just 1 because of the different networks)
-- check_xcorr: Check if there isn't nan values in the cross-correlation function
+- process_streams: Filters the seismic traces for the first templates.
+- create_window: Creates the offset of the template matching window depending
+  on the estimate arrival times.
+- get_window: Retrieves the value of the offset for each template and traces.
+- check_length: Matches the length of variables for traces with different
+  numbers of samples (usually just 1 because of the different networks)
+- check_xcorr: Checks if there aren't nan values in the cross-correlation function
   and counts how many stations got the coefficients for the normalization.
-- check_data: Check the quality of the data. In this case, used in the function
-  plot_stacks to be sure we are stacking correct data.
-- check_peak_frequency: Check if the dominant frequency isn't below 2Hz.
-- plot_data: Plot seismic station data for a specific date, including normalized
+- check_data: Checks the quality of the data. In this case, used in the function
+  plot_stacks to ensure we are stacking correct data.
+- check_peak_frequency: Checks if the dominant frequency isn't below 2Hz.
+- plot_data: Plots seismic station data for a specific date, including normalized
   traces with an offset.
-- plot_crosscorr: Plot the resulted cross-correlation function for 1 template
+- plot_crosscorr: Plots the resulting cross-correlation function for 1 template
   on the network.
-- plot_template: Plot the template for each station/channel combination.
-- plot_stacks: Plot the combined traces for all detections of a template for each
+- plot_template: Plots the template for each station/channel combination.
+- plot_stacks: Plots the combined traces for all detections of a template for all
   station/channel combination.
-- plot_locations: Create a plot of station locations and template events on a map.
+- plot_locations: Creates a plot of station locations and template events on a map.
 
 @author: papin
 
-As of 04/04/24.
+As of 08/04/24.
 """
 
 import os
+import pandas as pd
 from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
@@ -83,11 +88,6 @@ def get_traces(network_config, date_of_interests, base_dir):
             for sta in stations:
                 try:
                     if network == 'PB':
-                        dt = datetime.strptime(date, '%Y%m%d')
-                        julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
-                        file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
-                        st += read(file)[:3]
-                    elif sta == 'VGZ':
                         dt = datetime.strptime(date, '%Y%m%d')
                         julian_day = (dt - datetime(dt.year, 1, 1)).days + 1
                         file = os.path.join(path, filename_pattern.format(station=sta, year=dt.year, julian_day=julian_day))
@@ -173,7 +173,65 @@ def process_streams(st, template_stats, A):
 
     return st2, pairs2
 
-# ========== Process Data ==========
+def create_window(templates, win_size):
+    """
+    Creates windows for cross-correlation based on arrival times.
+
+    Parameters:
+        templates (DataFrame): All templates for the cross-correlation.
+        win_size (float): Size of the window.
+
+    Returns:
+        windows (list): List of DataFrames containing window data.
+
+    NB: The differences variable helps to know if in the window choosen for a 
+    station you will find P and S arrivals. But, because we're moving the window
+    a little after S-waves to take into account the margins of error of the 
+    travel times used, if timedelta~difference you can have NO instead of OK,
+    and vice versa. Over all the templates and detections it is fine, but it must 
+    be kept in mind when focusing on a particular case.
+    """
+    # All S-wave times; the file has to be changed depending on the period
+    AT = pd.read_csv('./arrival_times_tim_2005_SSE.txt', index_col=0)
+    # All times for the windows
+    windows = []
+    for idx, _ in templates.iterrows():
+        templ_idx = idx
+        stas = AT[AT.index == templ_idx]['station'] # Only stations from Travel.npy
+        S_times = AT[AT.index == templ_idx]['S-wave']
+        timedelta = (np.floor(S_times * 2) / 2) + 0.5 - win_size + 0.5
+        differences = round(AT[AT.index == templ_idx]['difference'],1)
+        PandS = differences.apply(lambda x: 'OK' if x < win_size else 'NO')
+        window_data = pd.concat([stas, S_times, timedelta, PandS], axis=1)
+        window_data.columns.values[-2] = 'timedelta'
+        window_data.columns.values[-1] = 'PandS'
+        windows.append(window_data)
+    return windows
+
+def get_window(windows, templ_idx, tr):
+    """
+    Retrieves the offset at which the window will start for cross-correlation.
+
+    Parameters:
+        windows (list): List of DataFrames containing windows data.
+        templ_idx (int): Index of the template (dependant of the period of time).
+        tr (obspy.core.Stream): Seismic trace data.
+
+    Returns:
+        timedelta (float): Offset for cross-correlation.
+    """
+    for idx, parameters in enumerate(windows):
+        if parameters.index[0] == templ_idx:
+            sta = tr.stats.station
+            if sta in parameters['station'].values:
+                info = parameters[parameters['station'] == sta]
+                timedelta = info['timedelta'].iloc[0]
+                return timedelta
+            else:
+                print(f"Station {sta} is not in the dataframe.")
+                return 10
+
+# ========== Verifications for Data ==========
 
 def check_length(xcorr_full, xcorr_template, mask):
     """

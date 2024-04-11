@@ -1,4 +1,5 @@
- # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Created on Tue Oct  3 15:56:50 2023
 
@@ -42,8 +43,8 @@ output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 from network_configurations import network_config
 
 # Days of data ###
-startdate = datetime.strptime("20100504", "%Y%m%d")
-enddate = datetime.strptime("20100520", "%Y%m%d")
+startdate = datetime.strptime("20050903", "%Y%m%d")
+enddate = datetime.strptime("20050925", "%Y%m%d")
 date_of_interests = []
 current_date = startdate
 while current_date <= enddate:
@@ -56,7 +57,7 @@ freqmin = 1.0
 freqmax = 8.0
 sampling_rate = 40.0
 dt = 1/sampling_rate
-# win_size = 8 ###
+win_size = 20 ###
 
 # Get the streams and preprocess
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
@@ -91,20 +92,10 @@ templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
 # templates = templates.sort_values(by='N', ascending=False)
-templates=templates.iloc[2226:2238+1]
+templates=templates.iloc[1480:1480+1]
 print(templates)
-
-# TODO: Adapt in a function?
-# Add columns for win_size and timedelta
-templates['win_size'] = [9,22,15,18,20,14,14,11,10,14,19,11,15]
-templates['timedelta'] = [timedelta(seconds=1), timedelta(seconds=9),
-                          timedelta(seconds=7), timedelta(seconds=8),
-                          timedelta(seconds=9), timedelta(seconds=6),
-                          timedelta(seconds=7), timedelta(seconds=4),
-                          timedelta(seconds=7), timedelta(seconds=6),
-                          timedelta(seconds=13), timedelta(seconds=5),
-                          timedelta(seconds=10)]
-
+windows=crosscorr_tools.create_window(templates,win_size)
+print(windows)
 # If you want to reuse the detections as new templates and
 # go through the process again, how many times?
 reuse_events=True
@@ -117,31 +108,43 @@ for idx, template_stats in templates.iterrows():
     all_template=[]
     templ_idx=idx
     name = f'templ{idx}'
-    win_size=template_stats['win_size']
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
     mask=np.zeros(len(xcorr_full))
-
+    # print(templ_idx)
+    # import matplotlib.pyplot as plt
     # Iterate over all stations and channels combination
     for tr in st:
         # Template data ###
-        start_templ = UTCDateTime(template_stats['OT']) + template_stats['timedelta']
+        offset = crosscorr_tools.get_window(windows,templ_idx,tr)
+        # print(tr)
+        # print(offset)
+        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=offset)#+ timedelta(seconds=7)
         end_templ = start_templ + timedelta(seconds=win_size)
         # Extract template data for each station
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
+        # plt.figure;plt.plot(template);plt.show()
         all_template.append(template.data)
         # Cross-correlate template with station data
         xcorr_template = autocorr_tools.correlate_template(
             tr.data, template.data,
             mode='valid', normalize='full', demean=True, method='auto'
-        )
+        ) ### Problème d'additionner des crosscorr values qui sont en décalées à cause des windows!!!!!!!!!
+        # plt.figure();plt.plot(xcorr_template);plt.show()
         # Ensure equal length for cross-correlation arrays
         xcorr_full, xcorr_template, mask = crosscorr_tools.check_length(xcorr_full, xcorr_template, mask)
         # Check if there are any NaN values and make it 0
         xcorr_template, mask = crosscorr_tools.check_xcorr(xcorr_template, mask)
         xcorr_full+=xcorr_template
+        idx=np.where(xcorr_template==np.max(np.abs(xcorr_template)))
+        # print(idx)
+        # print(xcorr_template[int(10000+offset*40)])
+        # print(xcorr_template[idx])
+        # print(xcorr_full[idx])
+        # plt.figure;plt.plot(xcorr_full);plt.show()
 
     # Network cross-correlation
     xcorrmean=xcorr_full/mask
+    # plt.figure;plt.plot(xcorrmean);plt.show()
 
     # Plot template time window on each station-channel combination
     template_plot_filename = crosscorr_tools.build_file_path(base_dir,
