@@ -57,7 +57,7 @@ freqmin = 1.0
 freqmax = 8.0
 sampling_rate = 40.0
 dt = 1/sampling_rate
-win_size = 20 ###
+win_size = 10 ###
 
 # Get the streams and preprocess
 st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
@@ -92,14 +92,14 @@ templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
 # templates = templates.sort_values(by='N', ascending=False)
-templates=templates.iloc[1480:1480+1]
+templates=templates.iloc[1479:1480+1]
 print(templates)
-windows=crosscorr_tools.create_window(templates,win_size)
+windows=crosscorr_tools.create_window(templates)
 print(windows)
 # If you want to reuse the detections as new templates and
 # go through the process again, how many times?
 reuse_events=True
-num_repeats=2
+num_repeats=1
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -110,15 +110,12 @@ for idx, template_stats in templates.iterrows():
     name = f'templ{idx}'
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
     mask=np.zeros(len(xcorr_full))
-    # print(templ_idx)
-    # import matplotlib.pyplot as plt
+    offset = windows.loc[templ_idx, 'timedelta']
+    print(offset)
     # Iterate over all stations and channels combination
     for tr in st:
         # Template data ###
-        offset = crosscorr_tools.get_window(windows,templ_idx,tr)
-        # print(tr)
-        # print(offset)
-        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=offset)#+ timedelta(seconds=7)
+        start_templ = UTCDateTime(template_stats['OT']) + timedelta(seconds=offset)
         end_templ = start_templ + timedelta(seconds=win_size)
         # Extract template data for each station
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
@@ -135,7 +132,7 @@ for idx, template_stats in templates.iterrows():
         # Check if there are any NaN values and make it 0
         xcorr_template, mask = crosscorr_tools.check_xcorr(xcorr_template, mask)
         xcorr_full+=xcorr_template
-        idx=np.where(xcorr_template==np.max(np.abs(xcorr_template)))
+        # idx=np.where(xcorr_template==np.max(np.abs(xcorr_template)))
         # print(idx)
         # print(xcorr_template[int(10000+offset*40)])
         # print(xcorr_template[idx])
