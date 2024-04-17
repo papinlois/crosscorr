@@ -37,8 +37,8 @@ TT = np.load('Travel.npy', allow_pickle=True).item()
 # sav_family_phases = np.load('./sav_family_phases.npy', allow_pickle=True).item()
 
 # Load detections for Tim's catalog
-startdate = datetime.strptime("20100504", "%Y%m%d")
-enddate = datetime.strptime("20100520", "%Y%m%d")
+startdate = datetime.strptime("20050903", "%Y%m%d")
+enddate = datetime.strptime("20050925", "%Y%m%d")
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
 templates=templates[(templates['residual']<0.5)]
@@ -57,7 +57,7 @@ coords = np.array(list(TT['T'].keys())) # Coordinates of each points on the grid
 sta_phase = TT['sta_phase'] # Station and P/S waves list
 # family_nb = np.array(list(sav_family_phases.keys()))
 # output_file_path = os.path.join(base_dir, 'arrival_times_bostock.txt')
-output_file_path = os.path.join(base_dir, 'arrival_times_tim.txt')
+output_file_path = os.path.join(base_dir, 'arrival_times_tim_2005_SSE.txt')
 
 # Check if the output file already exists
 if not os.path.isfile(output_file_path):
@@ -66,7 +66,7 @@ if not os.path.isfile(output_file_path):
         coords2[i] = [row['lon'], row['lat'], row['depth']]
     with open(output_file_path, "w", encoding="utf-8") as output_file:
         # Write header if the file is empty
-        output_file.write("starttime,sta,P-wave,S-wave,lon_event,lat_event,z_event\n")
+        output_file.write("template,station,P-wave,S-wave,difference,lon_event,lat_event,z_event\n")
     for idx in range(len(templates)):
         lon_event, lat_event, z_event = coords2[idx]
         exact_loc = coords[idx_loc([lon_event, lat_event, z_event])]
@@ -76,9 +76,10 @@ if not os.path.isfile(output_file_path):
             sta = sta_phase[i][:-2]
             time_P = arriv_times[i]
             time_S = arriv_times[i + int(len(arriv_times) / 2)]
+            diff = abs(time_P-time_S)
             with open(output_file_path, "a", encoding="utf-8") as output_file:
                 output_file.write(
-                    f"{idx},{sta},{time_P},{time_S},"
+                    f"{idx},{sta},{time_P},{time_S},{diff},"
                     f"{lon_event},{lat_event},{z_event}\n"
                 )
 else:
@@ -87,17 +88,15 @@ else:
 # ========== Doing Maths ==========
 
 # Read the data from the file
-with open('arrival_times_tim.txt', 'r') as file:
+with open(output_file_path, 'r') as file:
     reader = csv.reader(file)
     next(reader)  # Skip header
     data = [line for line in reader]
 
-# Calculate differences
-differences = []
 for line in data:
     p_wave = float(line[2])
     s_wave = float(line[3])
-    differences.append(s_wave - p_wave)
+    differences = float(line[4])
 
 # Organize data for visualization
 templates = list(set(line[0] for line in data))
@@ -116,22 +115,19 @@ for line in data:
     s_waves_times_station[station].append(float(line[3]))
 
 # ========== Plot Section ==========
-
+counts=[]
 # Organize data for visualization
 templates = list(set(line[0] for line in data))
 # templates = ['1564','1619','1747','1646','609','1801','1936','110','695','1627',,'2232','2233','2234','2235','2236','2237','2238'
 #               '1939','1630','1807','1940','1804','1634','1945','1800','1817','1793','1642']'2226',
-templates = [str(num) for num in range(2226, 2239)]
-# templates = ['2226']
-
+# templates = [str(num) for num in range(1162, 1174)]
+templates = ['2065']
+template_windows = {}
 # Iterate over each family
 for template in templates:
-    # Filter data for the current template
-    template_data = [line for line in data if line[0] == template]
-
     # Choosing stations
-    template_data = [template_data[3],template_data[9],template_data[10],template_data[17]]
-    # template_data=template_data[3:]
+    template_data = [line for line in data if line[0] == template and line[1] not in ['BPCB', 'TWGB', 'GOWB', 'LCBC', 'SOKB']]
+    template_data = [line for line in data if line[0] == template and line[1] in ['MGCB', 'JRBC', 'SILB','SSIB', 'TSJB', 'KLNB']]
 
     # Extract station names and corresponding P and S wave times
     stations = [line[1] for line in template_data]
@@ -140,7 +136,6 @@ for template in templates:
 
     # Sort stations by P-wave times in reverse order while keeping corresponding S-wave times aligned
     sorted_data = sorted(zip(p_wave_times, stations, s_wave_times), reverse=True)
-    # sorted_data=sorted_data[:-3]
     p_wave_times, stations, s_wave_times = zip(*sorted_data)
 
     # Create a new figure for each template
@@ -171,53 +166,96 @@ for template in templates:
     for s_wave, p_wave, station in zip(s_wave_times, p_wave_times, stations):
         ax.plot([p_wave, s_wave], [station, station], color='black', linestyle='-', linewidth=2)
 
+    # Maths
+    min_p_wave = round(min(p_wave_times), 3)
+    max_p_wave = round(max(p_wave_times), 3)
+    min_s_wave = round(min(s_wave_times), 3)
+    max_s_wave = round(max(s_wave_times), 3)
+    mean_p_wave = round(sum(p_wave_times) / len(p_wave_times), 3)
+    mean_s_wave = round(sum(s_wave_times) / len(s_wave_times), 3)
+    median_p_wave = round(np.median(p_wave_times), 3)
+    median_s_wave = round(np.median(s_wave_times), 3)
+    percentile_25_p_wave = round(np.percentile(p_wave_times, 25), 3)
+    percentile_75_s_wave = round(np.percentile(s_wave_times, 75), 3)
+    percentile_10_p_wave = round(np.percentile(p_wave_times, 10), 3)
+    percentile_90_s_wave = round(np.percentile(s_wave_times, 90), 3)
+    max_s_min_p_diff = round(max_s_wave - min_p_wave, 3)
+    differences = [s - p for s, p in zip(s_wave_times, p_wave_times)]
+    # mean_difference = round(sum(differences) / len(differences), 3)
+    percentile_90_difference = round(np.percentile(differences, 90), 3)
+    
+    count_stations = 0
+    # Define the interval (= template matching window)
+    interval_lower = percentile_75_s_wave 
+    interval_upper = percentile_75_s_wave - percentile_90_difference
+    for i in range(len(stations)):
+        p_time=p_wave_times[i]
+        s_time=s_wave_times[i]
+        if interval_lower <= p_time <= interval_upper and interval_lower <= s_time <= interval_upper:
+            count_stations += 1
+
     # Add vertical lines on the x-axis
-    # min_p_wave_time = min(p_wave_times)
-    # ax.axvline(x=1, color='red', linestyle='--')
-    # ax.axvline(x=21, color='red', linestyle='--')
+    ax.axvline(x=interval_lower, color='red', linestyle='--')
+    ax.axvline(x=interval_upper, color='red', linestyle='--')
 
-    # Calculate the minimum P-wave time and minimum S-wave time
-    min_p_wave_time = min(p_wave_times)
-    # min_s_wave_time = min(s_wave_times)
+    # Store the information in a dictionary
+    template_windows[template] = {
+        'percentile_75_s_wave': percentile_75_s_wave,
+        'min_p_wave': min_p_wave,
+        'max_p_wave': max_p_wave,
+        'min_s_wave': min_s_wave,
+        'max_s_wave': max_s_wave,
+        'max_s_min_p_diff': max_s_min_p_diff,
+        'mean_p_wave': mean_p_wave,
+        'mean_s_wave': mean_s_wave,
+        'median_p_wave': median_p_wave,
+        'median_s_wave': median_s_wave,
+        'interval choosen': 'min P-wave arrival + win_size(=10)',
+        'how many stas in interval': count_stations,
+        'stations': stations
+    }
+    plt.show()
+    print(template_windows)
+    # print(count_stations)
+    # counts.append(count_stations)
+# bins = list(range(0, 21, 2))
+# hist_values, bin_edges, _ = plt.hist(counts, bins=bins)
+# plt.xlabel('Number of Stations')
+# plt.ylabel('Frequency')
+# plt.title('Histogram of Stations with P and S wave arrivals (90th)')
+# plt.show()
+np.save('windows_param_tim.npy', template_windows)
 
-    # # Determine the time interval start based on the smaller of the two
-    # time_interval_start = min_p_wave_time if min_p_wave_time < min_s_wave_time else min_s_wave_time
+# test=np.load('windows_param.npy', allow_pickle=True).item()
 
-    # # Determine the time interval end based on the larger of the two
-    # max_p_wave_time = max(p_wave_times)
-    max_s_wave_time = max(s_wave_times)
-    # time_interval_end = max_p_wave_time if max_p_wave_time > max_s_wave_time else max_s_wave_time
 
-    # Print the minimum P-wave and maximum S-wave times for each template
-    print(f"Template {template}: Minimum P-wave time = {min_p_wave_time}, Maximum S-wave time = {max_s_wave_time}")
-    time_difference = max_s_wave_time - min_p_wave_time
-    import math
-    print(f"Template {template}: Rounded Difference = {math.ceil(time_difference)}")
-    # # Add vertical lines at the determined time interval
-    # ax.axvline(x=time_interval_start, color='red', linestyle='--')
-    # ax.axvline(x=time_interval_end, color='red', linestyle='--')
+# =============================================================================
+#     # # Calculate the minimum P-wave time and minimum S-wave time
+#     # min_p_wave_time = min(p_wave_times)
+#     # min_s_wave_time = min(s_wave_times)
+# 
+#     # # Determine the time interval start based on the smaller of the two
+#     # time_interval_start = min_p_wave_time if min_p_wave_time < min_s_wave_time else min_s_wave_time
+# 
+#     # # Determine the time interval end based on the larger of the two
+#     # max_p_wave_time = max(p_wave_times)
+#     # max_s_wave_time = max(s_wave_times)
+#     # time_interval_end = max_p_wave_time if max_p_wave_time > max_s_wave_time else max_s_wave_time
+# 
+#     # Print the minimum P-wave and maximum S-wave times for each template
+#     # print(f"Template {template}: Minimum P-wave time = {min_p_wave_time}, Maximum S-wave time = {max_s_wave_time}")
+#     # time_difference = max_s_wave_time - min_p_wave_time
+#     # import math
+#     # print(f"Template {template}: Rounded Difference = {math.ceil(time_difference)}")
+#     # # Add vertical lines at the determined time interval
+#     # ax.axvline(x=time_interval_start, color='red', linestyle='--')
+#     # ax.axvline(x=time_interval_end, color='red', linestyle='--')
+# =============================================================================
 
     # Save figure
-    # plt.savefig(base_dir + f'plots/tim/wave_times_template_{template}.png')
-    plt.show()
-
-# Useful results
-# =============================================================================
-# Template 2226: Minimum P-wave time = 1.8452647924423218, Maximum S-wave time = 9.415332794189453
-# Template 2227: Minimum P-wave time = 9.729854583740234, Maximum S-wave time = 30.71236801147461
-# Template 2228: Minimum P-wave time = 7.0158305168151855, Maximum S-wave time = 21.058326721191406
-# Template 2229: Minimum P-wave time = 8.727340698242188, Maximum S-wave time = 25.474031448364258
-# Template 2230: Minimum P-wave time = 9.405546188354492, Maximum S-wave time = 28.178327560424805
-# Template 2231: Minimum P-wave time = 6.066875457763672, Maximum S-wave time = 19.33150863647461
-# Template 2232: Minimum P-wave time = 7.433393478393555, Maximum S-wave time = 20.600797653198242
-# Template 2233: Minimum P-wave time = 4.570782661437988, Maximum S-wave time = 14.845993995666504
-# Template 2234: Minimum P-wave time = 7.483499050140381, Maximum S-wave time = 16.195301055908203
-# Template 2235: Minimum P-wave time = 6.800688743591309, Maximum S-wave time = 19.358928680419922
-# Template 2236: Minimum P-wave time = 13.286712646484375, Maximum S-wave time = 31.219696044921875
-# Template 2237: Minimum P-wave time = 5.813366889953613, Maximum S-wave time = 15.652213096618652
-# Template 2238: Minimum P-wave time = 10.843057632446289, Maximum S-wave time = 24.573495864868164
-# =============================================================================
-
+    # plt.savefig(base_dir + f'plots/tim/arrival times/wave_times_template_{template}.png')
+    
+# print(template_info)
 # =============================================================================
 # # Plotting Median Times for P-waves and S-waves for Each Family
 # plt.figure(figsize=(10, 6))
