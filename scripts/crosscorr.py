@@ -40,17 +40,17 @@ info_file_path = os.path.join(base_dir, 'plots', f"{folder}", "info.txt")
 output_file_path = os.path.join(base_dir, 'plots', f"{folder}", 'output.txt')
 
 # Define the network
-from network_configurations import network_config
+from network_configurations_test import network_config
 
 # Days of data ###
 startdate = datetime.strptime("20050903", "%Y%m%d")
 enddate = datetime.strptime("20050925", "%Y%m%d")
-date_of_interests = []
+dates_of_interest = []
 current_date = startdate
 while current_date <= enddate:
-    date_of_interests.append(current_date.strftime("%Y%m%d"))
+    dates_of_interest.append(current_date.strftime("%Y%m%d"))
     current_date += timedelta(days=1)
-lastday=date_of_interests[-1] #For filenames
+lastday=dates_of_interest[-1] #For filenames
 
 # Frequency range, sampling_rate, and time window
 freqmin = 1.0
@@ -60,7 +60,7 @@ dt = 1/sampling_rate
 win_size = 10 ###
 
 # Get the streams and preprocess
-st = crosscorr_tools.get_traces(network_config, date_of_interests, base_dir)
+st = crosscorr_tools.get_traces(network_config, dates_of_interest, base_dir)
 st = crosscorr_tools.process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax)
 print(st.__str__(extended=True))
 
@@ -92,14 +92,19 @@ templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 # To choose which templates
 # templates = templates.sort_values(by='N', ascending=False)
-templates=templates.iloc[1479:1480+1]
+templates=templates.iloc[1480:1480+1]
 print(templates)
-windows=crosscorr_tools.create_window(templates)
+# List of stations/channels to analyze
+stas=[]
+for tr in st:
+    stas.append(tr.stats.station)
+stas=list(set(stas))
+windows=crosscorr_tools.create_window(templates, stas, base_dir)
 print(windows)
 # If you want to reuse the detections as new templates and
 # go through the process again, how many times?
 reuse_events=True
-num_repeats=1
+num_repeats=2
 
 # Iterate over all templates
 for idx, template_stats in templates.iterrows():
@@ -111,7 +116,6 @@ for idx, template_stats in templates.iterrows():
     xcorr_full=np.zeros(int(st[0].stats.npts-(win_size*sampling_rate)))
     mask=np.zeros(len(xcorr_full))
     offset = windows.loc[templ_idx, 'timedelta']
-    print(offset)
     # Iterate over all stations and channels combination
     for tr in st:
         # Template data ###
@@ -119,34 +123,25 @@ for idx, template_stats in templates.iterrows():
         end_templ = start_templ + timedelta(seconds=win_size)
         # Extract template data for each station
         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
-        # plt.figure;plt.plot(template);plt.show()
         all_template.append(template.data)
         # Cross-correlate template with station data
         xcorr_template = autocorr_tools.correlate_template(
             tr.data, template.data,
             mode='valid', normalize='full', demean=True, method='auto'
-        ) ### Problème d'additionner des crosscorr values qui sont en décalées à cause des windows!!!!!!!!!
-        # plt.figure();plt.plot(xcorr_template);plt.show()
+        )
         # Ensure equal length for cross-correlation arrays
         xcorr_full, xcorr_template, mask = crosscorr_tools.check_length(xcorr_full, xcorr_template, mask)
         # Check if there are any NaN values and make it 0
         xcorr_template, mask = crosscorr_tools.check_xcorr(xcorr_template, mask)
         xcorr_full+=xcorr_template
-        # idx=np.where(xcorr_template==np.max(np.abs(xcorr_template)))
-        # print(idx)
-        # print(xcorr_template[int(10000+offset*40)])
-        # print(xcorr_template[idx])
-        # print(xcorr_full[idx])
-        # plt.figure;plt.plot(xcorr_full);plt.show()
 
     # Network cross-correlation
     xcorrmean=xcorr_full/mask
-    # plt.figure;plt.plot(xcorrmean);plt.show()
 
     # Plot template time window on each station-channel combination
     template_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                               folder, name, 'template1', lastday)
-    crosscorr_tools.plot_template(st, all_template, pairs, templ_idx, template_plot_filename)
+    crosscorr_tools.plot_template(all_template, pairs, sampling_rate, templ_idx, template_plot_filename)
 
     # Find indices where the cross-correlation values are above the threshold
     mad = np.nanmedian(np.abs(xcorrmean - np.nanmedian(xcorrmean)))
@@ -163,8 +158,8 @@ for idx, template_stats in templates.iterrows():
         # Plot cross-correlation function
         crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir,
                                                                   folder, name, 'crosscorr1', lastday)
-        crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
-                                        templ_idx, crosscorr_plot_filename, cpt, mask=mask)
+        crosscorr_tools.plot_crosscorr(xcorrmean, thresh, dt, newdect, templ_idx,
+                           crosscorr_plot_filename, cpt=cpt, mask=mask)
 
         # Plot stacked traces
         stack_plot_filename = crosscorr_tools.build_file_path(base_dir,
@@ -191,19 +186,14 @@ for idx, template_stats in templates.iterrows():
                 for idxx, tr in enumerate(st):
                     # Template data
                     for _, utc_time in enumerate(utc_times):
-                        # temp_template=[]
                         start_templ = UTCDateTime(utc_time)
                         end_templ = start_templ + timedelta(seconds=win_size)
                         # Extract template data for each station
                         template = tr.copy().trim(starttime=start_templ, endtime=end_templ)
-                        # temp_template.append(template.data)
                         # Normalize the template waveform
                         max_amplitude = np.max(np.abs(template.data))
                         if max_amplitude != 0:
                             template.data /= max_amplitude
-                        # Add the normalized template to the stacked trace if not main frequency between 1-2Hz
-                        # condition_met = crosscorr_tools.check_peak_frequency(temp_template)
-                        # if condition_met is True:
                         stacked_templ[idxx, :] += template.data
 
                     # Cross-correlate stacked template with station data
@@ -231,8 +221,8 @@ for idx, template_stats in templates.iterrows():
                 if newdect.size > 1:
                     # Plot cross-correlation function for new detections
                     crosscorr_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'crosscorr{cpt}', lastday)
-                    crosscorr_tools.plot_crosscorr(st, xcorrmean, thresh, newdect,
-                                                    templ_idx, crosscorr_plot_filename, cpt=cpt, mask=mask)
+                    crosscorr_tools.plot_crosscorr(xcorrmean, thresh, dt, newdect, templ_idx,
+                                       crosscorr_plot_filename, cpt=cpt, mask=mask)
 
                     # Plot stacked traces for new detections
                     stack_plot_filename = crosscorr_tools.build_file_path(base_dir, folder, name, f'stack{cpt}', lastday)
