@@ -8,18 +8,15 @@ Created on Thu Jan 25 11:09:14 2024
 This script creates a .txt file that relates estimated times for P- and 
 S-waves for each of Tim's detections + some figures to show the data.
 
-As of 04/04/24.
+As of 16/05/24.
 """
 
 import os
+from datetime import datetime
 import csv
-import time
-from datetime import datetime, timedelta
 import pandas as pd
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import crosscorr_tools
 
 base_dir = "/Users/lpapin/Documents/phd/"
 
@@ -37,17 +34,18 @@ TT = np.load('Travel.npy', allow_pickle=True).item()
 # sav_family_phases = np.load('./sav_family_phases.npy', allow_pickle=True).item()
 
 # Load detections for Tim's catalog
-startdate = datetime.strptime("20050903", "%Y%m%d")
-enddate = datetime.strptime("20050925", "%Y%m%d")
+startdate = datetime.strptime("20100504", "%Y%m%d")
+enddate = datetime.strptime("20100520", "%Y%m%d")
 # Load LFE data on Tim's catalog
-templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
+# templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
+templates=pd.read_csv('./EQloc_001_0.1_3_S.csv', index_col=0)
 templates=templates[(templates['residual']<0.5)]
 templates['OT'] = pd.to_datetime(templates['OT']) # Formatting 'OT' column as datetime
 templates = templates[(templates['OT'] >= startdate)
                     & (templates['OT'] < enddate)
                     & (templates['residual'] < 0.1)]
 templates = templates.sort_values(by='starttime', ascending=True)
-templates = templates.drop(columns=['dates', 'residual','dt','OT'])
+templates = templates.drop(columns=['residual','dt','OT'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
 print(templates)
@@ -56,8 +54,9 @@ print(templates)
 coords = np.array(list(TT['T'].keys())) # Coordinates of each points on the grid
 sta_phase = TT['sta_phase'] # Station and P/S waves list
 # family_nb = np.array(list(sav_family_phases.keys()))
-# output_file_path = os.path.join(base_dir, 'arrival_times_bostock.txt')
-output_file_path = os.path.join(base_dir, 'arrival_times_tim_2005_SSE.txt')
+# output_file_path = os.path.join(base_dir, 'arrival_times_tim_2005.txt')
+output_file_path = os.path.join(base_dir, 'arrival_times_tim_2010_SSE.txt') ###
+
 
 # Check if the output file already exists
 if not os.path.isfile(output_file_path):
@@ -121,13 +120,14 @@ templates = list(set(line[0] for line in data))
 # templates = ['1564','1619','1747','1646','609','1801','1936','110','695','1627',,'2232','2233','2234','2235','2236','2237','2238'
 #               '1939','1630','1807','1940','1804','1634','1945','1800','1817','1793','1642']'2226',
 # templates = [str(num) for num in range(1162, 1174)]
-templates = ['2065']
+# templates = ['22442']
+# templates_list = [str(num) for num in templates.index]   
 template_windows = {}
 # Iterate over each family
 for template in templates:
     # Choosing stations
-    template_data = [line for line in data if line[0] == template and line[1] not in ['BPCB', 'TWGB', 'GOWB', 'LCBC', 'SOKB']]
-    template_data = [line for line in data if line[0] == template and line[1] in ['MGCB', 'JRBC', 'SILB','SSIB', 'TSJB', 'KLNB']]
+    # template_data = [line for line in data if line[0] == template and line[1] not in ['BPCB', 'TWGB', 'GOWB', 'LCBC', 'SOKB']]
+    template_data = [line for line in data if line[0] == template and line[1] in stas]#['MGCB', 'LZB', 'VGZ', 'SILB', 'SSIB', 'SHDB', 'KLNB']]
 
     # Extract station names and corresponding P and S wave times
     stations = [line[1] for line in template_data]
@@ -166,7 +166,7 @@ for template in templates:
     for s_wave, p_wave, station in zip(s_wave_times, p_wave_times, stations):
         ax.plot([p_wave, s_wave], [station, station], color='black', linestyle='-', linewidth=2)
 
-    # Maths
+    # Maths with just round (ceil and floor in tools)
     min_p_wave = round(min(p_wave_times), 3)
     max_p_wave = round(max(p_wave_times), 3)
     min_s_wave = round(min(s_wave_times), 3)
@@ -186,14 +186,14 @@ for template in templates:
     
     count_stations = 0
     # Define the interval (= template matching window)
-    interval_lower = percentile_75_s_wave 
-    interval_upper = percentile_75_s_wave - percentile_90_difference
+    interval_lower = percentile_75_s_wave - 10
+    interval_upper = percentile_75_s_wave
     for i in range(len(stations)):
         p_time=p_wave_times[i]
         s_time=s_wave_times[i]
         if interval_lower <= p_time <= interval_upper and interval_lower <= s_time <= interval_upper:
             count_stations += 1
-
+            # print(count_stations)
     # Add vertical lines on the x-axis
     ax.axvline(x=interval_lower, color='red', linestyle='--')
     ax.axvline(x=interval_upper, color='red', linestyle='--')
@@ -215,16 +215,16 @@ for template in templates:
         'stations': stations
     }
     plt.show()
-    print(template_windows)
+    # print(template_windows)
     # print(count_stations)
-    # counts.append(count_stations)
-# bins = list(range(0, 21, 2))
-# hist_values, bin_edges, _ = plt.hist(counts, bins=bins)
-# plt.xlabel('Number of Stations')
-# plt.ylabel('Frequency')
-# plt.title('Histogram of Stations with P and S wave arrivals (90th)')
-# plt.show()
-np.save('windows_param_tim.npy', template_windows)
+    counts.append(count_stations)
+bins = list(range(0, 21, 2))
+hist_values, bin_edges, _ = plt.hist(counts, bins=bins)
+plt.xlabel('Number of Stations')
+plt.ylabel('Frequency')
+plt.title('Histogram of Stations with P and S wave arrivals (min)')
+plt.show()
+# np.save('windows_param_tim.npy', template_windows)
 
 # test=np.load('windows_param.npy', allow_pickle=True).item()
 
