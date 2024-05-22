@@ -51,9 +51,9 @@ for year in years:
         'Max Depth': max_depth_value,
         'Median Depth': round(median_depth, 1),
         'Mean Depth': round(mean_depth, 1),
-        'Max N': max_N_value,
-        'Median N': round(median_N, 1),
-        'Mean N': round(mean_N, 1)
+        'Max N': int(max_N_value),
+        'Median N': int(median_N),
+        'Mean N': int(mean_N)
     })
 
     # Plotting the histogram of the depth values for every 10km
