@@ -17,11 +17,17 @@ Functions:
 - create_window: Creates windows for the template matching based on the arrival
   times.
 - create_parameters: Creates the parameters needed for the windows.
+- create_arrival_times: Creates a text file containing arrival times based 
+  on provided templates and travel time data.
 - select_random_templates: Selects a number of random templates for 1 day.
 - check_length: Matches the length of variables for traces with different
   numbers of samples (usually just 1 because of the different networks)
-- check_xcorr: Checks if there aren't nan values in the cross-correlation function
-  and counts how many stations got the coefficients for the normalization.
+- check_xcorr_template: Checks if there aren't nan values in the cross-correlation 
+  function and counts how many stations got the coefficients for the normalization.
+- remove_crosscorr: If there is a gap in the data, cut it 2 min before to avoid
+  any issues with the limits. 
+- check_xcorr_full: Checksthe number of channels not available for every point 
+  of the function and remove if necessary; updates the crosscorr and mask values.
 - check_data: Checks the quality of the data. In this case, used in the function
   plot_stacks to ensure we are stacking correct data.
 - plot_data: Plots seismic station data for a specific date, including normalized
@@ -34,14 +40,14 @@ Functions:
 
 @author: papin
 
-As of 16/05/24.
+As of 17/06/24.
 """
 
 import os
 import csv
 import glob
-import pandas as pd
 from datetime import datetime
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from obspy import UTCDateTime
@@ -49,7 +55,7 @@ from obspy.core import read, Stream
 
 # ========== Files Management ==========
 
-def build_file_path(base_dir, folder, name, prefix, lastday):
+def build_file_path(base_dir, folder, diff, name, prefix, day):
     """
     Build a file path for saving plots (related to plot_template, plot_stacks,
     plot_crosscorr in crosscorr_tools module).
@@ -59,9 +65,9 @@ def build_file_path(base_dir, folder, name, prefix, lastday):
         folder (str): The subfolder within the base directory for organization.
         name (str): The base name of the file (usually number of the template).
         prefix (str): A prefix to be included in the file name.
-        lastday (str): The last day identifier to be included in the file name.
+        day (str): Day of the template event.
     """
-    return os.path.join(base_dir, f'plots/{folder}/{name}_{prefix}_{lastday}.png')
+    return os.path.join(base_dir, f'plots/{folder}/{diff}/{name}_{prefix}_{day}.png')
 
 # ========== Data Loading & Process Streams ==========
 
@@ -76,13 +82,16 @@ def get_traces(network_config, dates_of_interest, base_dir, which=None):
         which (str or None): If the code is run on talapas, None value will mean
         the code is running in local.
 
-    Returns:
+    Return:
         st (obspy.core.Stream): Seismic data streams.
     """
+    # Initialize the stream, stations list, and pairs list
+    st = Stream()
+    pairs = []
+    path = "/projects/amt/shared/" if which else os.path.join(base_dir, 'data', 'seed')
+
     # Talapas version just goes to search for every streams we ask for
     if which:
-        path = "/projects/amt/shared/"
-        st = Stream()
         for network, config in network_config.items():
             pathdir = os.path.join(path, "cascadia_" + network)
             stations = config['stations']
@@ -96,8 +105,6 @@ def get_traces(network_config, dates_of_interest, base_dir, which=None):
                         st += read(file_path)
     # In local we know the structure of the folders/files
     else:
-        path = os.path.join(base_dir, 'data', 'seed')
-        st = Stream()
         for date in dates_of_interest:
             for network, config in network_config.items():
                 stations = config['stations']
@@ -125,7 +132,11 @@ def get_traces(network_config, dates_of_interest, base_dir, which=None):
     st.merge(method=0, fill_value=0)
     st._cleanup()
 
-    return st
+    # Channels used
+    for tr in st:
+        pairs.append(tr.id[3:])
+
+    return st, pairs
 
 def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
     """
@@ -139,7 +150,7 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
         freqmin (float): Minimum frequency for bandpass filtering.
         freqmax (float): Maximum frequency for bandpass filtering.
 
-    Returns:
+    Return:
         st (obspy.core.Stream): Seismic data streams.
     """
     # Initialize start and end with values that will be updated
@@ -230,7 +241,7 @@ def remove_stations(st, pairs, tr_remove):
 
 # ========== Template Matching Parameters ==========
 
-def create_window(templates, stas, base_dir):
+def create_window(templates, stas, base_dir, diff):
     """
     Creates windows for cross-correlation based on arrival times.
 
@@ -239,12 +250,11 @@ def create_window(templates, stas, base_dir):
         stas (list): List of the stations used.
         base_dir (str): The base directory for file paths.
 
-    Returns:
+    Return:
         windows (list): List of DataFrames containing winsdow data.
 
     """
-    # All minimum P-waves arrival times computed on the 19 stations choosen
-    templates_info = create_parameters(templates, stas, base_dir)
+    templates_info = create_parameters(templates, stas, base_dir, diff)
     # Initialize lists to store the windows
     templ_idx_ = []
     begin_interval_S_ = []
@@ -254,8 +264,8 @@ def create_window(templates, stas, base_dir):
     for idx, _ in templates.iterrows():
         templ_idx_.append(idx)
         param = templates_info.get(str(idx), {})
-        begin_interval_P = np.floor(param.get('min_p_wave', 0) * 2) / 2 # arrondi à -0,5
-        begin_interval_S = np.ceil(param.get('percentile_75_s_wave', 0) * 2) / 2 # arrondi à +0,5
+        begin_interval_P = param.get('interval_lower_P', 0)
+        begin_interval_S = param.get('interval_upper_S', 0)
         begin_interval_P_.append(begin_interval_P)
         begin_interval_S_.append(begin_interval_S)
         nb_stas_P = param.get('count_stations_P', 0)
@@ -270,7 +280,7 @@ def create_window(templates, stas, base_dir):
     windows.set_index('template', inplace=True)
     return windows
 
-def create_parameters(templates, stas, base_dir):
+def create_parameters(templates, stas, base_dir, diff):
     """
     Create parameters for seismic templates based on arrival times.
     
@@ -279,7 +289,7 @@ def create_parameters(templates, stas, base_dir):
         stas (list): List of the stations used.
         base_dir (str): The base directory for file paths.
     
-    Returns:
+    Return:
         templates_info (dict): A dictionary containing information about each seismic template.
             Keys are template IDs and values are dictionaries with the following keys:
             - 'min_p_wave': The minimum P-wave arrival time among selected stations.
@@ -291,8 +301,8 @@ def create_parameters(templates, stas, base_dir):
     changed here for correct windows.
     """
     # Read the arrival times
-    # AT=os.path.join(os.path.join(base_dir, 'arrival_times_tim_2005.txt'))
-    AT=os.path.join(os.path.join(base_dir, 'arrival_times_tim_2010_SSE.txt'))
+    filename = create_arrival_times(templates, base_dir, diff)
+    AT=os.path.join(os.path.join(base_dir, filename))
 
     # Read the data from the file
     with open(AT, 'r', encoding="utf-8") as file:
@@ -314,36 +324,116 @@ def create_parameters(templates, stas, base_dir):
         p_wave_times = [float(line[2]) for line in template_data]
         s_wave_times = [float(line[3]) for line in template_data]
 
-        # Sort stations by P-wave times in reverse order while keeping corresponding S-wave times aligned
+        # Sort stations by P-wave times in reverse order while corresponding S-wave times
         sorted_data = sorted(zip(p_wave_times, stations, s_wave_times), reverse=True)
         p_wave_times, stations, s_wave_times = zip(*sorted_data)
 
         # Maths (more in create_arrival_times)
         min_p_wave = round(min(p_wave_times), 3)
-        percentile_75_s_wave = round(np.percentile(s_wave_times, 75), 3)
-        # percentile_75_s_wave = round(max(s_wave_times), 3) ###
+        percentile_75_S_wave = round(np.percentile(s_wave_times, 75), 3)
 
-        # # How many stations fit in the interval
-        interval_lower = min_p_wave
-        interval_upper = min_p_wave + 10
+        # How many stations fit in the interval
+        interval_lower_P = np.floor(min_p_wave * 2) / 2
+        interval_upper_P = interval_lower_P + 10
         count_stations_P = sum(1 for i in range(len(stations))
-                               if interval_lower <= p_wave_times[i] <= interval_upper
-                               and interval_lower <= s_wave_times[i] <= interval_upper)
-        interval_lower = percentile_75_s_wave - 10
-        interval_upper = percentile_75_s_wave
+                               if interval_lower_P <= p_wave_times[i] <= interval_upper_P
+                               and interval_lower_P <= s_wave_times[i] <= interval_upper_P)
+        interval_upper_S = np.ceil(percentile_75_S_wave * 2) / 2
+        interval_lower_S = interval_upper_S - 10
         count_stations_S = sum(1 for i in range(len(stations))
-                               if interval_lower <= p_wave_times[i] <= interval_upper
-                               and interval_lower <= s_wave_times[i] <= interval_upper)
+                               if interval_lower_S <= p_wave_times[i] <= interval_upper_S
+                               and interval_lower_S <= s_wave_times[i] <= interval_upper_S)
 
+        # Define the parameters
         templates_info[template] = {
-            'min_p_wave': min_p_wave,
-            'percentile_75_s_wave': percentile_75_s_wave,
+            'interval_lower_P': interval_lower_P,
+            'interval_upper_S': interval_upper_S,
             'count_stations_P': count_stations_P,
             'count_stations_S': count_stations_S,
             'stations': stations
         }
+        
+        ## Plotting part
+        fig, ax = plt.subplots(figsize=(8, 6))
+        for station in stations:
+            ax.plot([0, 30], [station, station], color='grey', linestyle='-', linewidth=1)
+        ax.scatter(p_wave_times, stations, color='blue', marker='o', label='P Wave')
+        ax.scatter(s_wave_times, stations, color='red', marker='o', label='S Wave')
+        ax.set_xticks([0, 5, 10, 15, 20, 25, 30])
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Station')
+        ax.set_title(f'Wave Times for template {template} - count={count_stations_P}')
+        for s_wave, p_wave, station in zip(s_wave_times, p_wave_times, stations):
+            ax.plot([p_wave, s_wave], [station, station], color='black', linestyle='-', linewidth=2)
+        # Add vertical lines on the x-axis
+        ax.axvline(x=interval_lower_P, color='blue', linestyle='--', label='Interval P')
+        ax.legend(loc='upper right')
+        ax.axvline(x=interval_upper_P, color='blue', linestyle='--')
+        windows_plot_filename = build_file_path(
+            base_dir, 'SSE_2005', f'{diff}', f'templ{template}', 'AT', f'{diff}')
+        plt.tight_layout()
+        plt.savefig(windows_plot_filename, dpi=300)
+        plt.close(fig)
 
     return templates_info
+
+def create_arrival_times(templates, base_dir, diff):
+    """
+    Create a text file containing arrival times based on provided templates 
+    and travel time data.
+
+    Parameters:
+        templates (DataFrame): All templates for the cross-correlation.
+        base_dir (str): The base directory for file paths.
+
+    Return:
+        output_file_path (str): The file path of the created text file 
+        containing arrival times.
+    """
+    def idx_loc(loc):
+        """
+        Given a rough location, return the index of the closest loc in grid-nodes.
+
+        Parameters:
+            loc (array-like): The coordinates [longitude, latitude, depth].
+
+        Return:
+            idx (int): The index of the closest location in the grid-nodes.
+        """
+        d2 = np.sum((coords[:, :3] - loc)**2, axis=1)
+        idx = np.argmin(d2)
+        return idx
+
+    # Load travel times from Tim's grid
+    TT = np.load(os.path.join(base_dir, "Travel.npy"), allow_pickle=True).item()
+    coords = np.array(list(TT['T'].keys()))  # Coordinates of each point on the grid
+    sta_phase = TT['sta_phase']  # Station and P/S waves list
+    output_file_path = os.path.join(base_dir, f'AT_{diff}.txt')
+    templates['index']=templates.index
+    # Create the txt file with the arrival times
+    coords2 = np.zeros((len(templates), 3))  # Coordinates of each detection
+    cpt=0
+    for cpt, (i, row) in enumerate(templates.iterrows()):
+        coords2[cpt] = [row['lon'], row['lat'], row['depth']]
+    with open(output_file_path, "w", encoding="utf-8") as output_file:
+        # Write header
+        output_file.write("template,station,P-wave,S-wave,difference,lon_event,lat_event,z_event\n")
+        for idx, (_, row) in enumerate(templates.iterrows()):
+            lon_event, lat_event, z_event = coords2[idx]
+            exact_loc = coords[idx_loc([lon_event, lat_event, z_event])]
+            arriv_times = TT['T'][tuple(exact_loc)]
+            # Write data for each station and its P- and S-wave arrival times
+            for i in range(0, int(len(arriv_times) / 2)):
+                sta = sta_phase[i][:-2]
+                time_P = arriv_times[i]
+                time_S = arriv_times[i + int(len(arriv_times) / 2)]
+                diff = abs(time_P - time_S)
+                output_file.write(
+                    f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{diff},"
+                    f"{lon_event},{lat_event},{z_event}\n"
+                )
+
+    return output_file_path
 
 def select_random_templates(df):
     """
@@ -352,7 +442,7 @@ def select_random_templates(df):
     Parameters:
         df (DataFrame): The DataFrame containing the templates.
 
-    Returns:
+    Return:
         df (DataFrame): A DataFrame containing a subset of randomly selected templates.
     """
     if len(df) <= 20:
@@ -372,7 +462,7 @@ def check_length(xcorr_full, xcorr_template, mask):
         values for a template.
         mask (numpy.ndarray): Array containing the mask values.
 
-    Returns:
+    Return:
         tuple: A tuple containing the corrected cross-correlation arrays.
     """
     if len(xcorr_template) < len(xcorr_full):
@@ -383,7 +473,7 @@ def check_length(xcorr_full, xcorr_template, mask):
         mask = mask[:len(xcorr_full)]
     return xcorr_full, xcorr_template, mask
 
-def check_xcorr(xcorr_template, mask):
+def check_xcorr_template(xcorr_template, mask):
     """
     Check the cross-correlation values of a template and update a mask accordingly.
 
@@ -414,6 +504,70 @@ def check_xcorr(xcorr_template, mask):
     else:
         mask+=1
     return xcorr_template, mask
+
+def remove_crosscorr(idx, samples=2400):
+    """
+    Remove crosscorr values by adding indexes number.
+    
+    Parameters:
+        idx (tuple): The indexes of bad values of crosscorr.
+        samples (int): Number of samples to add to idx.
+
+    Returns:
+        idx (tuple): The actualized indexes.
+    """
+    idxx = idx[0]
+    idx_set = set(idxx)
+    # Find the beginning of each suite
+    starts = [idxx[0]]  # The first element is always a start
+    for i in range(1, len(idxx)):
+        if idxx[i] != idxx[i - 1] + 1:
+            starts.append(idxx[i])
+    # Add indices before each start to account for 1 minute of samples
+    for start in starts:
+        if start - samples >= 0:
+            idx_set.update(range(start - samples, start))
+        else:
+            idx_set.update(range(0, start))
+    idx=(np.array(sorted(idx_set)),)
+    return idx
+
+def check_xcorr_full(xcorr_full, mask):
+    """
+    Check the cross-correlation values of a template and update a mask accordingly.
+
+    Parameters:
+        xcorr_full (numpy.ndarray): The network cross-correlation values of the template.
+        mask (numpy.ndarray): An array used to track problematic values.
+
+    Returns:
+        xcorr_full: The updated cross-correlation values.
+        mask: The updated mask array.
+
+    If the `xcorr_full` has values coming from a small number of stations, we 
+    chose to put the values of the function and the mask at 0. This is made to 
+    avoid bias on the normalization of each cc fct values, which is depending 
+    on the number of stations from which the data is coming. 
+    
+    NB: For now, the decisions are made based on the networks CN and PO for the 
+    2005 SSE so it can be adapted. It is around a 20% channels missing.
+    """
+    nb_chas = np.max(mask) # Can be different from the number of stations*3
+    if nb_chas/3<=6: #PO or CN or C8
+        idx = np.where(mask<nb_chas-3)
+    elif nb_chas/3<=12: #PO and CN
+        idx = np.where(mask<nb_chas-6)
+    elif nb_chas/3>12: #PO and CN and C8
+        idx = np.where(mask<nb_chas-9)
+    if idx[0].size != 0:
+        # Remove 2 minutes of data for each values = 0
+        idx=remove_crosscorr(idx, samples=2400*2)
+        # Remove the crosscorr and mask values
+        mask[idx]=0
+        xcorr_full[idx]=0
+        print('Some values of the cc fct have been removed due to the small '
+              'number of available channels for these points.')
+    return xcorr_full, mask
 
 def check_data(data):
     """
@@ -446,8 +600,6 @@ def plot_data(st, pairs, data_plot_filename):
         channels (list): List of channel names.
         data_plot_filename (str): Filename for saving the plot.
 
-    Returns:
-        None
     """
     cpt=0
     for i in range(0, len(st), 3):
@@ -485,48 +637,44 @@ def plot_crosscorr(xcorrmean, thresh, dt, newdect,
         crosscorr_plot_filename (str): Path to save the plot.
         cpt (int): Number of the iteration for the title.
 
-    Returns:
-        None
     """
     _, ax = plt.subplots(figsize=(10, 4))
     ax.plot(dt * np.arange(len(xcorrmean)), xcorrmean, label='Cross-correlation')
-    ax.axhline(thresh, color='red', label='Threshold')
+    ax.axhline(thresh, color='red', label='Threshold', alpha=0.7)
     ax.plot(newdect * dt, xcorrmean[newdect], 'kx', label='Detected events')
-
     if np.any(mask):
         ax_mask = ax.twinx()
-        ax_mask.plot(dt * np.arange(len(mask)), mask, color='green', label='Mask')
+        ax_mask.plot(dt * np.arange(len(mask)), mask, color='green', label='Mask', alpha=0.7)
         ax_mask.set_ylabel('Number of channels', fontsize=14)
-
     ax.set_xlabel('Time (s)', fontsize=14)
     ax.set_ylabel('Correlation Coefficient', fontsize=14)
     ax.set_xlim(0, len(xcorrmean)*dt)
-    ax.set_title(f'Cross-correlation Function for Template {templ_idx}'
+    ax.set_title(f'Cross-correlation Function for Template {templ_idx} '
                  f'- Iteration {cpt} - {len(newdect)} detections', fontsize=16)
-    lines, labels = ax.get_legend_handles_labels()
-    if np.any(mask):
-        lines_mask, labels_mask = ax_mask.get_legend_handles_labels()
-        ax.legend(lines + lines_mask, labels + labels_mask, loc='center right')
-    else:
-        ax.legend(lines, labels, loc='center right')
+    # lines, labels = ax.get_legend_handles_labels()
+    # if np.any(mask):
+    #     lines_mask, labels_mask = ax_mask.get_legend_handles_labels()
+    #     ax.legend(lines + lines_mask, labels + labels_mask, loc='center right')
+    # else:
+    #     ax.legend(lines, labels, loc='center right')
     plt.tight_layout()
     plt.savefig(crosscorr_plot_filename, dpi=300)
     plt.close()
 
-def plot_template(all_template, pairs, time_event, sampling_rate,
+def plot_template(all_template, pairs, time_event, N, sampling_rate,
                   templ_idx, template_plot_filename):
     """
     Plot normalized templates with an offset on the y-axis.
 
     Parameters:
-        st (obspy.core.Stream): Seismic data streams.
         all_template (list): List of template traces.
         pairs (list): List of pairs corresponding to each template in all_template.
+        time_event (UTCDateTime): The event time for the template.
+        N (int): The number of stations that detected the event.
+        sampling_rate (float): Sampling rate of the template data.
         templ_idx (int): Index of the template.
         template_plot_filename (str): Filename for saving the plot.
 
-    Returns:
-        None
     """
     # Plot each template with an offset on the y-axis
     plt.figure(figsize=(12,6))
@@ -542,8 +690,9 @@ def plot_template(all_template, pairs, time_event, sampling_rate,
         offset -= nb
     plt.xlabel('Time (s)', fontsize=14)
     plt.ylabel('Normalized Data + Offset', fontsize=14)
-    plt.title(f'All Templates for Template {templ_idx} - {time_event}', fontsize=16)
-    plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=12)
+    plt.title(f'All Templates for Template {templ_idx} - {time_event} - N={N}', fontsize=16)
+    plt.yticks(np.arange(len(pairs)) * nb+nb, pairs[::-1], fontsize=11)
+    plt.tick_params(axis='y', left=False, right=True, labelleft=False, labelright=True)
     plt.xlim(0, max(x))
     plt.ylim(0, len(pairs) * nb + nb)
     plt.grid(True)
@@ -564,18 +713,16 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
         stack_plot_filename (str): Filename for saving the plot.
         cpt (int): Number of the iteration for the title.
 
-    Returns:
-        None
     """
 
     # Stacking process
-    stacked_traces = np.zeros((len(st), int(40 * st[0].stats.sampling_rate)))
+    stacked_traces = np.zeros((len(st), int(30 * st[0].stats.sampling_rate)))
     for idx, tr in enumerate(st):
         cptwave=0 # Number of waveforms we don't stack bc of value issues
         all_waveform=[]
         for dect in newdect:
             # Normalize each waveform by its maximum absolute amplitude
-            start_time = dect - int(15 * tr.stats.sampling_rate)
+            start_time = dect - int(5 * tr.stats.sampling_rate)
             end_time = dect + int(25 * tr.stats.sampling_rate)
             if end_time > len(tr.data):
                 continue
@@ -593,7 +740,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.figure(figsize=(12,6))
     nb = 1  # Distance between plots
     offset = len(stacked_traces) * nb
-    x = np.linspace(0, 40, len(stacked_traces[0, :]), endpoint=False)
+    x = np.linspace(0, 30, len(stacked_traces[0, :]), endpoint=False)
     for i in range(len(stacked_traces)):
         norm = np.max(np.abs(stacked_traces[i,:])) # Same weight for each stack on the figure
         plt.plot(x, stacked_traces[i,:]/norm+offset, label=f'{pairs[i]}')
@@ -602,15 +749,15 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
     plt.ylabel('Normalized Data + Offset', fontsize=14)
     plt.title(f'Stacked Traces for Template {templ_idx} '
               f'- Iteration {cpt} - {len(newdect)} detections', fontsize=16)
-    plt.yticks(np.arange(len(pairs))*nb+nb, pairs[::-1], fontsize=12)
-    plt.xticks([0,10,20,30],[-15,-5,5,15])
-    plt.xlim(0,50)
+    plt.yticks(np.arange(len(pairs))*nb+nb, pairs[::-1], fontsize=11)
+    plt.tick_params(axis='y', left=False, right=True, labelleft=False, labelright=True)
+    plt.xticks([0,5,10,20,30],[-5,0,5,15,25])
+    plt.xlim(0,30)
     plt.ylim(0, len(pairs)*nb+nb)
     plt.grid(True)
     plt.tight_layout()
-    # plt.savefig(stack_plot_filename)
     plt.savefig(stack_plot_filename, dpi=300)
-    plt.show()
+    plt.close()
     return stacked_traces
 
 # ========== Old functions that can be reused ==========
@@ -700,31 +847,6 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 #             condition_met = False
 #
 #     return condition_met
-# =============================================================================
-
-# =============================================================================
-# def get_window(windows, templ_idx, tr):
-#     """
-#     Retrieves the offset at which the window will start for cross-correlation.
-#
-#     Parameters:
-#         windows (list): List of DataFrames containing windows data.
-#         templ_idx (int): Index of the template (dependant of the period of time).
-#         tr (obspy.core.Stream): Seismic trace data.
-#
-#     Returns:
-#         timedelta (float): Offset for cross-correlation.
-#     """
-#     for idx, parameters in enumerate(windows):
-#         if parameters.index[0] == templ_idx:
-#             sta = tr.stats.station
-#             if sta in parameters['station'].values:
-#                 info = parameters[parameters['station'] == sta]
-#                 timedelta = info['timedelta'].iloc[0]
-#                 return timedelta
-#             else:
-#                 print(f"Station {sta} is not in the dataframe.")
-#                 return 10
 # =============================================================================
 
 ## Old version of create_window to get each station a window depending on S-wave times
