@@ -31,7 +31,7 @@ startscript = time.time()
 # Define the base directory
 base_dir = "/home/lpapin/crosscorr"
 folder = "SSE_2005"
-diff = "aug_PO" # If different network tested
+diff = "" # If different network tested
 which = 'talapas'
 # Generate the output files paths
 info_file_path = os.path.join(base_dir, 'plots', f"{folder}", f'{diff}',f"info_{diff}.txt")
