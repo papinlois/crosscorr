@@ -1,4 +1,6 @@
-﻿# CrossCorr Seismic Data Analysis
+Update need to be done: new scripts and obsolete ones removed. (03/07)
+
+# CrossCorr Seismic Data Analysis
 
 This repository contains Python scripts for analyzing and detecting seismic events in seismic station data using network cross-correlation techniques. The scripts are designed to process and analyze seismic data from multiple stations, perform cross-correlation, and detect significant correlations, which may indicate seismic events. The detected events are then clustered and summarized for further analysis.
 

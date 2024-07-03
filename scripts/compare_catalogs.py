@@ -7,7 +7,7 @@ This script processes seismic event data from two catalogs: an initial catalog
 containing seismic events' metadata and a secondary catalog of detections. 
 
 The initial catalog (`lfe_svi.txt`) contains seismic event data that helped to 
-create the templates for cross-correlation that initied the detections (`output.txt`.
+create the templates for cross-correlation that initied the detections (`output.txt`).
 
 The idea is to verify that the "new detections" actually confirms the data we
 have in the initial catalog.

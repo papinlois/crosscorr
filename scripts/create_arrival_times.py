@@ -17,6 +17,7 @@ import csv
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import crosscorr_tools
 
 base_dir = "/Users/lpapin/Documents/phd/"
 
@@ -33,21 +34,24 @@ def idx_loc(loc):
 TT = np.load('Travel.npy', allow_pickle=True).item()
 # sav_family_phases = np.load('./sav_family_phases.npy', allow_pickle=True).item()
 
-# Load detections for Tim's catalog
-startdate = datetime.strptime("20100504", "%Y%m%d")
-enddate = datetime.strptime("20100520", "%Y%m%d")
+startall = datetime.strptime("20050801", "%Y%m%d")
+endall = datetime.strptime("20050831", "%Y%m%d")
 # Load LFE data on Tim's catalog
-# templates=pd.read_csv('./EQloc_001_0.1_3_S.txt_withdates', index_col=0)
 templates=pd.read_csv('./EQloc_001_0.1_3_S.csv', index_col=0)
-templates=templates[(templates['residual']<0.5)]
 templates['OT'] = pd.to_datetime(templates['OT']) # Formatting 'OT' column as datetime
-templates = templates[(templates['OT'] >= startdate)
-                    & (templates['OT'] < enddate)
+templates = templates[(templates['OT'] >= startall)
+                    & (templates['OT'] < endall)
                     & (templates['residual'] < 0.1)]
-templates = templates.sort_values(by='starttime', ascending=True)
-templates = templates.drop(columns=['residual','dt','OT'])
+templates = templates.drop(columns=['residual', 'dt'])
 templates.reset_index(inplace=True, drop=True)
 templates.index.name = 'Index'
+# 5 random templates per day with highest N values
+random_templates = templates.groupby(templates['OT'].dt.date).apply(
+    crosscorr_tools.select_random_templates)
+templates = random_templates.groupby(random_templates['OT'].dt.date).apply(
+    lambda x: x.nlargest(3, 'N'))
+templates.index = templates.index.droplevel(level=[0, 1])
+templates.sort_index(ascending=True)
 print(templates)
 
 # Extract necessary data
@@ -55,18 +59,18 @@ coords = np.array(list(TT['T'].keys())) # Coordinates of each points on the grid
 sta_phase = TT['sta_phase'] # Station and P/S waves list
 # family_nb = np.array(list(sav_family_phases.keys()))
 # output_file_path = os.path.join(base_dir, 'arrival_times_tim_2005.txt')
-output_file_path = os.path.join(base_dir, 'arrival_times_tim_2010_SSE.txt') ###
+output_file_path = os.path.join(base_dir, 'arrival_times_tim_2005_.txt') ###
 
-
-# Check if the output file already exists
-if not os.path.isfile(output_file_path):
-    coords2 = np.zeros((len(templates), 3)) # Coordinates of each detection
-    for i, row in templates.iterrows():
-        coords2[i] = [row['lon'], row['lat'], row['depth']]
-    with open(output_file_path, "w", encoding="utf-8") as output_file:
-        # Write header if the file is empty
-        output_file.write("template,station,P-wave,S-wave,difference,lon_event,lat_event,z_event\n")
-    for idx in range(len(templates)):
+templates['index']=templates.index
+# Create the txt file with the arrival times
+coords2 = np.zeros((len(templates), 3))  # Coordinates of each detection
+cpt=0
+for cpt, (i, row) in enumerate(templates.iterrows()):
+    coords2[cpt] = [row['lon'], row['lat'], row['depth']]
+with open(output_file_path, "w", encoding="utf-8") as output_file:
+    # Write header
+    output_file.write("template,station,P-wave,S-wave,difference,lon_event,lat_event,z_event\n")
+    for idx, (_, row) in enumerate(templates.iterrows()):
         lon_event, lat_event, z_event = coords2[idx]
         exact_loc = coords[idx_loc([lon_event, lat_event, z_event])]
         arriv_times = TT['T'][tuple(exact_loc)]
@@ -75,14 +79,11 @@ if not os.path.isfile(output_file_path):
             sta = sta_phase[i][:-2]
             time_P = arriv_times[i]
             time_S = arriv_times[i + int(len(arriv_times) / 2)]
-            diff = abs(time_P-time_S)
-            with open(output_file_path, "a", encoding="utf-8") as output_file:
-                output_file.write(
-                    f"{idx},{sta},{time_P},{time_S},{diff},"
-                    f"{lon_event},{lat_event},{z_event}\n"
-                )
-else:
-    print(f"The output file '{output_file_path}' already exists. No modifications are made.")
+            diff = abs(time_P - time_S)
+            output_file.write(
+                f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{diff},"
+                f"{lon_event},{lat_event},{z_event}\n"
+            )
 
 # ========== Doing Maths ==========
 
@@ -123,6 +124,9 @@ templates = list(set(line[0] for line in data))
 # templates = ['22442']
 # templates_list = [str(num) for num in templates.index]   
 template_windows = {}
+base_dir = "/Users/lpapin/Documents/phd/"
+from network_configurations import network_config
+stas = [station for value in network_config.values() for station in value['stations']]
 # Iterate over each family
 for template in templates:
     # Choosing stations
@@ -186,8 +190,8 @@ for template in templates:
     
     count_stations = 0
     # Define the interval (= template matching window)
-    interval_lower = percentile_75_s_wave - 10
-    interval_upper = percentile_75_s_wave
+    interval_lower = min_p_wave
+    interval_upper = min_p_wave + 10
     for i in range(len(stations)):
         p_time=p_wave_times[i]
         s_time=s_wave_times[i]
@@ -214,16 +218,20 @@ for template in templates:
         'how many stas in interval': count_stations,
         'stations': stations
     }
+    
+    windows_plot_filename = crosscorr_tools.build_file_path(base_dir, 'tim',f'templ{template}', 'arrival_times', '')
+    plt.tight_layout()
+    plt.savefig(windows_plot_filename, dpi=300)
     plt.show()
     # print(template_windows)
     # print(count_stations)
     counts.append(count_stations)
-bins = list(range(0, 21, 2))
-hist_values, bin_edges, _ = plt.hist(counts, bins=bins)
-plt.xlabel('Number of Stations')
-plt.ylabel('Frequency')
-plt.title('Histogram of Stations with P and S wave arrivals (min)')
-plt.show()
+# bins = list(range(0, 21, 2))
+# hist_values, bin_edges, _ = plt.hist(counts, bins=bins)
+# plt.xlabel('Number of Stations')
+# plt.ylabel('Frequency')
+# plt.title('Histogram of Stations with P and S wave arrivals (min)')
+# plt.show()
 # np.save('windows_param_tim.npy', template_windows)
 
 # test=np.load('windows_param.npy', allow_pickle=True).item()
