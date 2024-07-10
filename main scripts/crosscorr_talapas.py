@@ -7,7 +7,7 @@ Created on Tue Oct  3 15:56:50 2023
 
 Version for the cluster on talapas of crosscorr.py.
     
-As of 17/06/24.
+As of 18/06/24.
 """
 
 # ================ Initialization ================
@@ -31,11 +31,11 @@ startscript = time.time()
 # Define the base directory
 base_dir = "/home/lpapin/crosscorr"
 folder = "SSE_2005"
-diff = "" # If different network tested
+subfolder = "" # If subfolder
 which = 'talapas'
 # Generate the output files paths
-info_file_path = os.path.join(base_dir, 'plots', f"{folder}", f'{diff}',f"info_{diff}.txt")
-output_file_path = os.path.join(base_dir, 'plots', f"{folder}", f'{diff}',  f"output_{diff}.txt")
+info_file_path = os.path.join(base_dir, 'plots', f"{folder}", f'{subfolder}',f"info_{subfolder}.txt")
+output_file_path = os.path.join(base_dir, 'plots', f"{folder}", f'{subfolder}',  f"output_{subfolder}.txt")
 
 # Define the network
 from network_configurations_talapas import network_config
@@ -88,7 +88,7 @@ days_crosscorr = 3
 reuse_events=False
 num_repeats = 3
 # Start time definition for the windows
-windows=crosscorr_tools.create_window(templates, stas, base_dir, diff)
+windows=crosscorr_tools.create_window(templates, stas, base_dir, subfolder)
 print(windows)
 interval = 'P' #P for min_p_wave+win_size or S for percentile_75th_s_wave-win_size
 # Track results
@@ -197,21 +197,21 @@ for idx, template_stats in templates.iterrows():
 
         # Plot template time window on each station-channel combination
         template_plot_filename = crosscorr_tools.build_file_path(
-            base_dir, folder, diff, name, 'template1', day)
+            base_dir, folder, subfolder, name, 'template1', day)
         crosscorr_tools.plot_template(
             all_template, pairs, time_event, N, sampling_rate,
             templ_idx, template_plot_filename)
 
         # Plot cross-correlation function
         crosscorr_plot_filename = crosscorr_tools.build_file_path(
-            base_dir, folder, diff, name, 'crosscorr1', day)
+            base_dir, folder, subfolder, name, 'crosscorr1', day)
         crosscorr_tools.plot_crosscorr(
             xcorrmean, thresh, dt, newdect, templ_idx,
             crosscorr_plot_filename, cpt=cpt, mask=mask)
 
         # Plot stacked traces
         stack_plot_filename = crosscorr_tools.build_file_path(
-            base_dir, folder, diff, name, 'stack1', day)
+            base_dir, folder, subfolder, name, 'stack1', day)
         crosscorr_tools.plot_stacks(
             st, newdect, pairs, templ_idx, stack_plot_filename, cpt)
 
@@ -272,14 +272,14 @@ for idx, template_stats in templates.iterrows():
                 if 2 <= newdect.size <= 1000:
                     # Plot cross-correlation function for new detections
                     crosscorr_plot_filename = crosscorr_tools.build_file_path(
-                        base_dir, folder, diff, name, f'crosscorr{cpt}', day)
+                        base_dir, folder, subfolder, name, f'crosscorr{cpt}', day)
                     crosscorr_tools.plot_crosscorr(
                         xcorrmean, thresh, dt, newdect, templ_idx,
                         crosscorr_plot_filename, cpt=cpt, mask=mask)
 
                     # Plot stacked traces for new detections
                     stack_plot_filename = crosscorr_tools.build_file_path(
-                        base_dir, folder, diff, name, f'stack{cpt}', day)
+                        base_dir, folder, subfolder, name, f'stack{cpt}', day)
                     crosscorr_tools.plot_stacks(
                         st, newdect, pairs, templ_idx, stack_plot_filename, cpt=cpt)
 

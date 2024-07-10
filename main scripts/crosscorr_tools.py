@@ -12,7 +12,6 @@ Functions:
 - get_traces: Loads seismic data for specified stations, channels, and date.
 - process_data: Preprocess seismic data, including interpolation, trimming,
   detrending, and filtering.
-- process_streams: Filters the seismic traces for the first templates.
 - remove_stations: Removes the pairs of station and channel with bad data.
 - create_window: Creates windows for the template matching based on the arrival
   times.
@@ -20,8 +19,8 @@ Functions:
 - create_arrival_times: Creates a text file containing arrival times based 
   on provided templates and travel time data.
 - select_random_templates: Selects a number of random templates for 1 day.
-- check_length: Matches the length of variables for traces with different
-  numbers of samples (usually just 1 because of the different networks)
+- check_length: Matches the length of variables for traces with subfoldererent
+  numbers of samples (usually just 1 because of the subfoldererent networks)
 - check_xcorr_template: Checks if there aren't nan values in the cross-correlation 
   function and counts how many stations got the coefficients for the normalization.
 - remove_crosscorr: If there is a gap in the data, cut it 2 min before to avoid
@@ -55,7 +54,7 @@ from obspy.core import read, Stream
 
 # ========== Files Management ==========
 
-def build_file_path(base_dir, folder, diff, name, prefix, day):
+def build_file_path(base_dir, folder, subfolder, name, prefix, day):
     """
     Build a file path for saving plots (related to plot_template, plot_stacks,
     plot_crosscorr in crosscorr_tools module).
@@ -67,7 +66,7 @@ def build_file_path(base_dir, folder, diff, name, prefix, day):
         prefix (str): A prefix to be included in the file name.
         day (str): Day of the template event.
     """
-    return os.path.join(base_dir, f'plots/{folder}/{diff}/{name}_{prefix}_{day}.png')
+    return os.path.join(base_dir, f'plots/{folder}/{subfolder}/{name}_{prefix}_{day}.png')
 
 # ========== Data Loading & Process Streams ==========
 
@@ -172,40 +171,6 @@ def process_data(st, startdate, enddate, sampling_rate, freqmin, freqmax):
 
     return st
 
-def process_streams(st, template_stats, A):
-    """
-    Process seismic traces and create a new Stream and a list of station-channel pairs.
-    It gets which stations detected the event and filter st to keep only those ones.
-    
-    Parameters:
-        st (obspy.core.Stream): Seismic data streams.
-        template_stats (dict): Metadata template information.
-        A (dict): Dictionary containing additional information based on the template.
-
-    Returns:
-        st2 (obspy.core.Stream): Filtered seismic data streams based on the template.
-        pairs2 (list): List of pairs corresponding to each trace in st2.
-    """
-    starttime = str(template_stats['starttime'])
-
-    # Extract information from the template
-    templ_info = A[starttime]
-    stas = templ_info['sta']
-
-    # Filter streams based on station codes
-    st2 = Stream()
-    for tr in st:
-        # Extract station code from trace id
-        station_code = tr.stats.network + '.' + tr.stats.station
-        # Check if the station code is in the list of desired stations
-        if station_code in stas:
-            st2 += tr
-
-    # Create a list of station-channel pairs for st2
-    pairs2 = [f"{tr.stats.station}.{tr.stats.channel}" for tr in st2]
-
-    return st2, pairs2
-
 def remove_stations(st, pairs, tr_remove):
     """
     Remove stations from the stream list and their corresponding pairs. The 
@@ -241,7 +206,7 @@ def remove_stations(st, pairs, tr_remove):
 
 # ========== Template Matching Parameters ==========
 
-def create_window(templates, stas, base_dir, diff):
+def create_window(templates, stas, base_dir, subfolder):
     """
     Creates windows for cross-correlation based on arrival times.
 
@@ -254,7 +219,7 @@ def create_window(templates, stas, base_dir, diff):
         windows (list): List of DataFrames containing winsdow data.
 
     """
-    templates_info = create_parameters(templates, stas, base_dir, diff)
+    templates_info = create_parameters(templates, stas, base_dir, subfolder)
     # Initialize lists to store the windows
     templ_idx_ = []
     begin_interval_S_ = []
@@ -280,7 +245,7 @@ def create_window(templates, stas, base_dir, diff):
     windows.set_index('template', inplace=True)
     return windows
 
-def create_parameters(templates, stas, base_dir, diff):
+def create_parameters(templates, stas, base_dir, subfolder):
     """
     Create parameters for seismic templates based on arrival times.
     
@@ -301,7 +266,7 @@ def create_parameters(templates, stas, base_dir, diff):
     changed here for correct windows.
     """
     # Read the arrival times
-    filename = create_arrival_times(templates, base_dir, diff)
+    filename = create_arrival_times(templates, base_dir, subfolder)
     AT=os.path.join(os.path.join(base_dir, filename))
 
     # Read the data from the file
@@ -370,14 +335,14 @@ def create_parameters(templates, stas, base_dir, diff):
         ax.legend(loc='upper right')
         ax.axvline(x=interval_upper_P, color='blue', linestyle='--')
         windows_plot_filename = build_file_path(
-            base_dir, 'SSE_2005', f'{diff}', f'templ{template}', 'AT', f'{diff}')
+            base_dir, 'SSE_2005', f'{subfolder}', f'templ{template}', 'AT', f'{subfolder}')
         plt.tight_layout()
         plt.savefig(windows_plot_filename, dpi=300)
         plt.close(fig)
 
     return templates_info
 
-def create_arrival_times(templates, base_dir, diff):
+def create_arrival_times(templates, base_dir, subfolder):
     """
     Create a text file containing arrival times based on provided templates 
     and travel time data.
@@ -408,7 +373,7 @@ def create_arrival_times(templates, base_dir, diff):
     TT = np.load(os.path.join(base_dir, "Travel.npy"), allow_pickle=True).item()
     coords = np.array(list(TT['T'].keys()))  # Coordinates of each point on the grid
     sta_phase = TT['sta_phase']  # Station and P/S waves list
-    output_file_path = os.path.join(base_dir, f'AT_{diff}.txt')
+    output_file_path = os.path.join(base_dir, f'AT_{subfolder}.txt')
     templates['index']=templates.index
     # Create the txt file with the arrival times
     coords2 = np.zeros((len(templates), 3))  # Coordinates of each detection
@@ -417,7 +382,7 @@ def create_arrival_times(templates, base_dir, diff):
         coords2[cpt] = [row['lon'], row['lat'], row['depth']]
     with open(output_file_path, "w", encoding="utf-8") as output_file:
         # Write header
-        output_file.write("template,station,P-wave,S-wave,difference,lon_event,lat_event,z_event\n")
+        output_file.write("template,station,P-wave,S-wave,subfoldererence,lon_event,lat_event,z_event\n")
         for idx, (_, row) in enumerate(templates.iterrows()):
             lon_event, lat_event, z_event = coords2[idx]
             exact_loc = coords[idx_loc([lon_event, lat_event, z_event])]
@@ -427,9 +392,9 @@ def create_arrival_times(templates, base_dir, diff):
                 sta = sta_phase[i][:-2]
                 time_P = arriv_times[i]
                 time_S = arriv_times[i + int(len(arriv_times) / 2)]
-                diff = abs(time_P - time_S)
+                subfolder = abs(time_P - time_S)
                 output_file.write(
-                    f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{diff},"
+                    f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{subfolder},"
                     f"{lon_event},{lat_event},{z_event}\n"
                 )
 
@@ -552,7 +517,7 @@ def check_xcorr_full(xcorr_full, mask):
     NB: For now, the decisions are made based on the networks CN and PO for the 
     2005 SSE so it can be adapted. It is around a 20% channels missing.
     """
-    nb_chas = np.max(mask) # Can be different from the number of stations*3
+    nb_chas = np.max(mask) # Can be subfoldererent from the number of stations*3
     if nb_chas/3<=6: #PO or CN or C8
         idx = np.where(mask<nb_chas-3)
     elif nb_chas/3<=12: #PO and CN
@@ -784,7 +749,7 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 #     """
 #     plt.figure()
 #
-#     # Separate stations by network and plot them in different colors
+#     # Separate stations by network and plot them in subfoldererent colors
 #     for name, lon, lat, network in locs:
 #         if network == 'CN':
 #             plt.plot(lon, lat, 'bo')
@@ -860,10 +825,46 @@ def plot_stacks(st, newdect, pairs, templ_idx, stack_plot_filename, cpt):
 #         stas = AT[AT.index == templ_idx]['station'] # Only stations from Travel.npy
 #         S_times = AT[AT.index == templ_idx]['S-wave']
 #         timedelta = (np.ceil(S_times * 2) / 2) - win_size + 0.5
-#         differences = round(AT[AT.index == templ_idx]['difference'],1)
-#         PandS = differences.apply(lambda x: 'OK' if x < win_size else 'NO')
+#         subfoldererences = round(AT[AT.index == templ_idx]['subfoldererence'],1)
+#         PandS = subfoldererences.apply(lambda x: 'OK' if x < win_size else 'NO')
 #         window_data = pd.concat([stas, S_times, timedelta, PandS], axis=1)
 #         window_data.columns.values[-2] = 'timedelta'
 #         window_data.columns.values[-1] = 'PandS'
 #         windows.append(window_data)
+# =============================================================================
+
+# =============================================================================
+# def process_streams(st, template_stats, A):
+#     """
+#     Process seismic traces and create a new Stream and a list of station-channel pairs.
+#     It gets which stations detected the event and filter st to keep only those ones.
+#     
+#     Parameters:
+#         st (obspy.core.Stream): Seismic data streams.
+#         template_stats (dict): Metadata template information.
+#         A (dict): Dictionary containing additional information based on the template.
+# 
+#     Returns:
+#         st2 (obspy.core.Stream): Filtered seismic data streams based on the template.
+#         pairs2 (list): List of pairs corresponding to each trace in st2.
+#     """
+#     starttime = str(template_stats['starttime'])
+# 
+#     # Extract information from the template
+#     templ_info = A[starttime]
+#     stas = templ_info['sta']
+# 
+#     # Filter streams based on station codes
+#     st2 = Stream()
+#     for tr in st:
+#         # Extract station code from trace id
+#         station_code = tr.stats.network + '.' + tr.stats.station
+#         # Check if the station code is in the list of desired stations
+#         if station_code in stas:
+#             st2 += tr
+# 
+#     # Create a list of station-channel pairs for st2
+#     pairs2 = [f"{tr.stats.station}.{tr.stats.channel}" for tr in st2]
+# 
+#     return st2, pairs2
 # =============================================================================
