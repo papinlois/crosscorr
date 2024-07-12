@@ -47,12 +47,14 @@ The repository will generate various plots, output files, and information about 
 
 ## Repository Overview
 
+This repository was intended to host all scripts related to the template-matching process, and it has evolved to include scripts to improve the study, such as picking of S-wave arrival times and the dendrogram. These scripts can be found in both the main folder and the analysis subfolder.
+
 ### Main scripts
 
 - `crosscorr_talapas.py`: The main script for seismic data analysis and detection. It is aimed to be used on the cluster (because of the filepaths and such).
 - `crosscorr_tools.py` and `autocorr_tools.py`: These are modules containing utility functions for data visualization and processing.
 - `network_configurations_talapas.py`: A dictionary of all the stations with their channels and filename paths. Imported as a module in the main script of cross-correlation.
-- `matric_cc`: This script computes all the cross-correlation values between unique events pairs and creates .txt files with all the results. Our choice here is our new events detected by the template-matching.
+- `matric_cc.py`: This script computes all the cross-correlation values between unique events pairs and creates .txt files with all the results. Our choice here is our new events detected by the template-matching.
 - `picker_cc_stack.py`: Any number of detections can be stacked and we use a picker to get the S-wave arrival time.
 
 ### Analysis
