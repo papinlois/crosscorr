@@ -6,8 +6,9 @@ Created on Tue Oct  3 15:56:50 2023
 @author: papin
 
 Version for the cluster on talapas of crosscorr.py.
+Look at ### for the lastest parameters.
     
-As of 18/06/24.
+As of 22/07/24.
 """
 
 # ================ Initialization ================
@@ -30,7 +31,7 @@ startscript = time.time()
 
 # Define the base directory
 base_dir = "/home/lpapin/crosscorr"
-folder = "SSE_2005"
+folder = "2005"
 subfolder = "" # If subfolder
 which = 'talapas'
 # Generate the output files paths
@@ -43,13 +44,15 @@ stas = [station for value in network_config.values() for station in value['stati
 
 # ================ Events ================
 
-startall = datetime.strptime("20050903", "%Y%m%d")
-endall = datetime.strptime("20050925", "%Y%m%d")
+startall = datetime.strptime("20050101", "%Y%m%d")
+endall = datetime.strptime("20051231", "%Y%m%d")
 # Load LFE data on Tim's catalog
 templates=pd.read_csv('./EQloc_001_0.1_3_S.csv', index_col=0)
 templates['OT'] = pd.to_datetime(templates['OT']) # Formatting 'OT' column as datetime
 templates = templates[(templates['OT'] >= startall)
                     & (templates['OT'] < endall)
+                    & ~((templates['OT'] >= datetime.strptime("20050903", "%Y%m%d")) ###
+                    & (templates['OT'] < datetime.strptime("20050926", "%Y%m%d"))) ###
                     & (templates['residual'] < 0.1)]
 templates = templates.drop(columns=['residual', 'dt'])
 templates.reset_index(inplace=True, drop=True)
@@ -83,7 +86,7 @@ sampling_rate = 40.0
 dt = 1/sampling_rate
 win_size = 10
 # Days around the template
-days_crosscorr = 3
+days_crosscorr = 7 ###
 # How may times do you iterate?
 reuse_events=False
 num_repeats = 3
@@ -324,7 +327,8 @@ script_execution_time = time.time() - startscript
 with open(info_file_path, 'w', encoding='utf-8') as file:
     file.write(f"Date Range: {startall.strftime('%Y-%m-%d')}"
                f"-{endall.strftime('%Y-%m-%d')} with "
-               f"{days_crosscorr} days around the event\n\n")
+               f"{days_crosscorr} days around the event\n")
+    file.write("!!The SSE days have been removed.\n\n") ###
     file.write(f"Stations : {stas}\n\n")
     file.write(f"Frequency range: {freqmin}-{freqmax} Hz\n")
     file.write(f"Sampling rate: {sampling_rate} Hz\n\n")
