@@ -335,7 +335,7 @@ def create_parameters(templates, stas, base_dir, subfolder):
         ax.legend(loc='upper right')
         ax.axvline(x=interval_upper_P, color='blue', linestyle='--')
         windows_plot_filename = build_file_path(
-            base_dir, 'SSE_2005', f'{subfolder}', f'templ{template}', 'AT', f'{subfolder}')
+            base_dir, '2005', f'{subfolder}', f'templ{template}', 'AT', f'{subfolder}')
         plt.tight_layout()
         plt.savefig(windows_plot_filename, dpi=300)
         plt.close(fig)
@@ -380,9 +380,9 @@ def create_arrival_times(templates, base_dir, subfolder):
     cpt=0
     for cpt, (i, row) in enumerate(templates.iterrows()):
         coords2[cpt] = [row['lon'], row['lat'], row['depth']]
-    with open(output_file_path, "w", encoding="utf-8") as output_file:
+    with open(output_file_path, "a", encoding="utf-8") as output_file:
         # Write header
-        output_file.write("template,station,P-wave,S-wave,subfoldererence,lon_event,lat_event,z_event\n")
+        output_file.write("template,station,P-wave,S-wave,diffPS,lon_event,lat_event,z_event\n")
         for idx, (_, row) in enumerate(templates.iterrows()):
             lon_event, lat_event, z_event = coords2[idx]
             exact_loc = coords[idx_loc([lon_event, lat_event, z_event])]
@@ -392,9 +392,9 @@ def create_arrival_times(templates, base_dir, subfolder):
                 sta = sta_phase[i][:-2]
                 time_P = arriv_times[i]
                 time_S = arriv_times[i + int(len(arriv_times) / 2)]
-                subfolder = abs(time_P - time_S)
+                diffPS = abs(time_P - time_S)
                 output_file.write(
-                    f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{subfolder},"
+                    f"{templates['index'].iloc[idx]},{sta},{time_P},{time_S},{diffPS},"
                     f"{lon_event},{lat_event},{z_event}\n"
                 )
 
